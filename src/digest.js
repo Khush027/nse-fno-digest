@@ -41,8 +41,9 @@ function sym(ticker, cls = '') {
 }
 
 function formatPrice(p) {
-  if (p == null) return 'N/A';
-  return typeof p === 'number' ? p.toFixed(2) : String(p);
+  if (p == null || p === '' || p === undefined) return '';
+  const n = typeof p === 'number' ? p : parseFloat(p);
+  return isNaN(n) ? String(p) : n.toFixed(2);
 }
 
 function niftyClass(pChange) {
@@ -52,7 +53,7 @@ function niftyClass(pChange) {
   return 'flat';
 }
 
-function buildMarketBar(niftyIndex) {
+function buildMarketBar(niftyIndex, fiiDiiResults) {
   const last = niftyIndex ? niftyIndex.last : null;
   const change = niftyIndex ? niftyIndex.change : null;
   const pChange = niftyIndex ? niftyIndex.pChange : null;
@@ -68,6 +69,14 @@ function buildMarketBar(niftyIndex) {
     ? `<span class="${cls}">${sign}${parseFloat(pChange).toFixed(2)}% (${sign}${formatPrice(change)})</span>`
     : '<span class="flat">N/A</span>';
 
+  // Extract FII/DII snippet from web search result
+  let fiiDiiHtml = '<span class="flat">See nseindia.com</span>';
+  if (Array.isArray(fiiDiiResults) && fiiDiiResults.length > 0) {
+    const r = fiiDiiResults[0];
+    const snippet = (r.snippet || r.title || '').slice(0, 120);
+    fiiDiiHtml = `<span class="flat" title="${snippet}">${snippet}</span>`;
+  }
+
   return `
 <div class="market-bar">
   <div class="stat">
@@ -79,12 +88,8 @@ function buildMarketBar(niftyIndex) {
     <span class="value">${niftyChg}</span>
   </div>
   <div class="stat">
-    <span class="label">GIFT Nifty</span>
-    <span class="value flat">Data via web search</span>
-  </div>
-  <div class="stat">
-    <span class="label">FII / DII</span>
-    <span class="value flat">See NSE</span>
+    <span class="label">FII / DII Activity</span>
+    <span class="value" style="font-size:0.82rem;font-weight:normal;">${fiiDiiHtml}</span>
   </div>
 </div>`;
 }
@@ -112,20 +117,23 @@ function buildBreakoutsSection(universe, gainersLosers) {
     }
   }
 
-  if (items.length === 0 && gainersLosers) {
+  if (items.length === 0 && gainersLosers && !gainersLosers._fallback) {
     const gainers = Array.isArray(gainersLosers.gainers) ? gainersLosers.gainers.slice(0, 5) : [];
     const losers = Array.isArray(gainersLosers.losers) ? gainersLosers.losers.slice(0, 3) : [];
     for (const g of gainers) {
-      const ticker = g.symbol || g.Symbol || '';
-      const pct = g.pChange || g.perChange || g.change || '';
-      const price = g.lastPrice || g.LTP || '';
-      if (ticker) items.push(`<li>${sym(ticker, 'sym-green')} — UP ${pct}% @ &#8377;${formatPrice(price)} (top gainer)</li>`);
+      // NSE API may use different field names across endpoints
+      const ticker = g.symbol || g.Symbol || g.meta?.symbol || '';
+      const pct = g.pChange || g.perChange || g.change || g.netPrice || '';
+      const price = g.lastPrice || g.ltp || g.LTP || g.ltP || g.open || '';
+      const priceStr = price ? ` @ &#8377;${formatPrice(price)}` : '';
+      if (ticker) items.push(`<li>${sym(ticker, 'sym-green')} — UP ${pct}%${priceStr} — top F&amp;O gainer</li>`);
     }
     for (const l of losers) {
-      const ticker = l.symbol || l.Symbol || '';
-      const pct = l.pChange || l.perChange || l.change || '';
-      const price = l.lastPrice || l.LTP || '';
-      if (ticker) items.push(`<li>${sym(ticker, 'sym-red')} — DOWN ${pct}% @ &#8377;${formatPrice(price)} (top loser)</li>`);
+      const ticker = l.symbol || l.Symbol || l.meta?.symbol || '';
+      const pct = l.pChange || l.perChange || l.change || l.netPrice || '';
+      const price = l.lastPrice || l.ltp || l.LTP || l.ltP || l.open || '';
+      const priceStr = price ? ` @ &#8377;${formatPrice(price)}` : '';
+      if (ticker) items.push(`<li>${sym(ticker, 'sym-red')} — DOWN ${pct}%${priceStr} — top F&amp;O loser</li>`);
     }
   }
 
@@ -284,6 +292,19 @@ function buildKeyDatesSection(boardMeetings) {
 </div>`;
 }
 
+function buildWebSearchSection(title, icon, colorClass, results) {
+  if (!Array.isArray(results) || results.length === 0) return '';
+  const items = results.slice(0, 4).map(r => {
+    const snippet = r.snippet ? `<br/><small style="color:#666;">${r.snippet.slice(0, 180)}</small>` : '';
+    return `<li><strong>${r.title}</strong>${snippet}</li>`;
+  }).join('');
+  return `
+<div class="section">
+  <div class="section-header ${colorClass}">${icon} ${title}</div>
+  <div class="section-body"><ul class="news">${items}</ul></div>
+</div>`;
+}
+
 function buildFallbackSection(fallbackNotes) {
   if (!Array.isArray(fallbackNotes) || fallbackNotes.length === 0) return '';
   const items = fallbackNotes.map(n => `<li>${n}</li>`).join('');
@@ -294,31 +315,34 @@ function buildFallbackSection(fallbackNotes) {
 </div>`;
 }
 
-function buildDigestHtml({ universe, gainersLosers, corporateActions, bulkDeals, boardMeetings, brokerCallResults, banList, niftyIndex, fallbackNotes, date, dateISO }) {
+function buildDigestHtml({ universe, gainersLosers, corporateActions, bulkDeals, boardMeetings, brokerCallResults, banList, niftyIndex, fiiDiiResults, orderWinsResults, indexRejigResults, fallbackNotes, date, dateISO }) {
   const universeCount = Array.isArray(universe) ? universe.length : 0;
 
   const header = `
 <div class="header">
   <h1>&#128200; NSE F&amp;O Morning Digest</h1>
-  <div class="subtitle">F&amp;O Universe — Breakouts, Actions &amp; Ban List</div>
+  <div class="subtitle">F&amp;O Universe &mdash; Breakouts, Corporate Actions, News &amp; Ban List</div>
   <div class="meta">
     <span>&#128197; ${date}</span>
     <span>&#8987; Generated at 8:00 AM IST</span>
-    <span>&#128293; ${universeCount} stocks in F&amp;O universe</span>
+    ${universeCount > 0 ? `<span>&#128293; ${universeCount} stocks in universe</span>` : ''}
   </div>
 </div>`;
 
-  const marketBar = buildMarketBar(niftyIndex);
+  const marketBar = buildMarketBar(niftyIndex, fiiDiiResults);
   const breakouts = buildBreakoutsSection(universe, gainersLosers);
   const corpActions = buildCorporateActionsSection(corporateActions);
   const news = buildNewsSection(bulkDeals, boardMeetings, brokerCallResults);
+  const orderWins = buildWebSearchSection('Order Wins &amp; Corporate Developments', '&#128220;', 'sh-teal', orderWinsResults);
+  const indexRejig = buildWebSearchSection('Index Rejig &amp; Macro News', '&#127758;', 'sh-purple', indexRejigResults);
   const ban = buildBanSection(banList);
   const keyDates = buildKeyDatesSection(boardMeetings);
   const fallback = buildFallbackSection(fallbackNotes);
 
   const footer = `
 <div class="footer">
-  NSE F&amp;O Morning Digest | Auto-generated | ${date} | For informational purposes only.
+  NSE F&amp;O Morning Digest &nbsp;|&nbsp; Auto-generated &nbsp;|&nbsp; ${date}, 8:00 AM IST<br/>
+  <em>For informational purposes only. Not investment advice. Always verify with official NSE/BSE sources.</em>
 </div>`;
 
   return `<!DOCTYPE html>
@@ -326,7 +350,7 @@ function buildDigestHtml({ universe, gainersLosers, corporateActions, bulkDeals,
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NSE F&amp;O Morning Digest — ${date}</title>
+<title>NSE F&amp;O Morning Digest &mdash; ${date}</title>
 <style>${CSS}</style>
 </head>
 <body>
@@ -336,6 +360,8 @@ ${marketBar}
 ${breakouts}
 ${corpActions}
 ${news}
+${orderWins}
+${indexRejig}
 ${ban}
 ${keyDates}
 ${fallback}

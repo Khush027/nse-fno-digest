@@ -16,6 +16,10 @@ const {
   fallbackBoardMeetings,
   fallbackBrokerCalls,
   fallbackGainersLosers,
+  fallbackFiiDii,
+  fallbackBanList,
+  fallbackOrderWins,
+  fallbackIndexRejig,
 } = require('./search');
 
 const { buildDigestHtml } = require('./digest');
@@ -148,11 +152,30 @@ async function main() {
     banList = await fetchBanList();
     console.log(`F&O ban list: ${banList.length} stocks.`);
   } catch (err) {
-    console.warn(`Ban list fetch failed (${err.message}).`);
-    fallbackNotes.push('F&O ban list: NSE blocked, verify manually at nseindia.com.');
+    console.warn(`Ban list fetch failed (${err.message}), using web fallback.`);
+    try {
+      const banResults = await fallbackBanList(dateISO);
+      // Extract ticker-like tokens from search results (all-caps 2-10 char words)
+      const text = banResults.map(r => r.title + ' ' + r.snippet).join(' ');
+      const tickers = [...new Set((text.match(/\b[A-Z]{2,10}\b/g) || [])
+        .filter(t => !['NSE','BSE','FNO','BAN','MWPL','THE','FOR','AND','ARE','NOT','PER'].includes(t)))];
+      if (tickers.length > 0) banList = tickers.slice(0, 10);
+      else fallbackNotes.push('F&O ban list: NSE blocked, verify at nseindia.com.');
+    } catch (e2) {
+      fallbackNotes.push('F&O ban list: NSE blocked, verify at nseindia.com.');
+    }
   }
 
-  // 9. Build HTML digest
+  // 9. FII/DII, order wins, index rejig (all web search)
+  const [fiiDiiResults, orderWinsResults, indexRejigResults] = await Promise.allSettled([
+    fallbackFiiDii(dateISO),
+    fallbackOrderWins(dateISO),
+    fallbackIndexRejig(dateISO),
+  ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
+
+  console.log(`FII/DII: ${fiiDiiResults.length}, Order wins: ${orderWinsResults.length}, Index rejig: ${indexRejigResults.length}`);
+
+  // 10. Build HTML digest
   const htmlBody = buildDigestHtml({
     universe,
     gainersLosers,
@@ -162,6 +185,9 @@ async function main() {
     brokerCallResults,
     banList,
     niftyIndex,
+    fiiDiiResults,
+    orderWinsResults,
+    indexRejigResults,
     fallbackNotes,
     date: dateDisplay,
     dateISO,

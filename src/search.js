@@ -67,35 +67,62 @@ async function searchWeb(query) {
   }
 }
 
-// Fallback: get F&O stock list via web search
 async function fallbackFnoList() {
-  const results = await searchWeb('NSE F&O stock list current 2025');
+  const results = await searchWeb('NSE F&O eligible stocks list site:nseindia.com OR site:moneycontrol.com');
   if (results.length === 0) return 'No fallback data available for F&O universe.';
   return results.map(r => `${r.title}: ${r.snippet}`).join('\n');
 }
 
-// Fallback: bulk deals for a given date
 async function fallbackBulkDeals(dateStr) {
-  const results = await searchWeb(`NSE bulk deals ${dateStr}`);
-  return results;
+  return searchWeb(`NSE BSE bulk block deals India ${dateStr}`);
 }
 
-// Fallback: board meetings for a given date
 async function fallbackBoardMeetings(dateStr) {
-  const results = await searchWeb(`NSE board meeting ${dateStr}`);
-  return results;
+  return searchWeb(`NSE India board meeting results declaration ${dateStr}`);
 }
 
-// Fallback: broker calls/upgrades/downgrades
+// Run multiple targeted searches and merge results
 async function fallbackBrokerCalls(dateStr) {
-  const results = await searchWeb(`broker upgrade downgrade NSE ${dateStr}`);
-  return results;
+  const [upgrades, targets, calls] = await Promise.all([
+    searchWeb(`India stock broker upgrade downgrade target price ${dateStr}`),
+    searchWeb(`NSE stock analyst rating change buy sell ${dateStr} India`),
+    searchWeb(`Indian stock market broker recommendation today ${dateStr}`),
+  ]);
+  const seen = new Set();
+  return [...upgrades, ...targets, ...calls].filter(r => {
+    if (seen.has(r.title)) return false;
+    seen.add(r.title);
+    return true;
+  }).slice(0, 6);
 }
 
-// Fallback: gainers and losers
 async function fallbackGainersLosers(dateStr) {
-  const results = await searchWeb(`NSE F&O stocks gainers losers ${dateStr}`);
-  return results;
+  return searchWeb(`NSE top gainers losers F&O stocks today ${dateStr} India`);
+}
+
+// Fetch FII/DII data via web search
+async function fallbackFiiDii(dateStr) {
+  return searchWeb(`FII DII net buy sell NSE India ${dateStr} crore`);
+}
+
+// Fetch Nifty index level via web search
+async function fallbackNiftyLevel(dateStr) {
+  return searchWeb(`Nifty 50 closing level ${dateStr} India stock market`);
+}
+
+// Fetch F&O ban list via web search
+async function fallbackBanList(dateStr) {
+  return searchWeb(`NSE F&O ban list securities ${dateStr} MWPL`);
+}
+
+// Fetch order wins and corporate news via web search
+async function fallbackOrderWins(dateStr) {
+  return searchWeb(`India company order win contract award NSE ${dateStr}`);
+}
+
+// Fetch index rejig news
+async function fallbackIndexRejig(dateStr) {
+  return searchWeb(`Nifty Sensex BSE NSE index inclusion exclusion rejig ${dateStr}`);
 }
 
 module.exports = {
@@ -105,4 +132,9 @@ module.exports = {
   fallbackBoardMeetings,
   fallbackBrokerCalls,
   fallbackGainersLosers,
+  fallbackFiiDii,
+  fallbackNiftyLevel,
+  fallbackBanList,
+  fallbackOrderWins,
+  fallbackIndexRejig,
 };
