@@ -1,6 +1,6 @@
 """
 NSE F&O Morning Digest — main entry point.
-Collects data, builds HTML, saves to docs/, and emails a link.
+All market data sourced via yfinance / public RSS feeds (no NSE geo-blocking issues).
 """
 import os
 import sys
@@ -8,16 +8,10 @@ from datetime import datetime
 from pathlib import Path
 import pytz
 
-# Add repo root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data.nse_ban import fetch_ban_list
-from src.data.market_data import (
-    fetch_nifty_index, fetch_nifty_yfinance,
-    fetch_fii_dii,
-    fetch_fno_universe, fetch_gainers_losers,
-    fetch_gainers_losers_yfinance,
-)
+from src.data.market_data import get_market_data, get_top_gainers_losers, get_fii_dii_data
 from src.data.news import fetch_news
 from src.data.brokerage import fetch_brokerage_calls
 from src.data.corporate_actions import fetch_corporate_actions
@@ -71,120 +65,83 @@ def main() -> None:
     print(f"NSE F&O Morning Digest — {date_str}")
     print("Collecting data...\n")
 
-    fallback_notes: list[str] = []
+    # 1. Market data (yfinance — works globally)
+    print("Fetching market data (yfinance)...")
+    market = get_market_data()
+    nifty    = market.get("nifty50")
+    banknifty = market.get("banknifty")
+    sensex   = market.get("sensex")
+    print(f"  Nifty50:   {nifty and nifty['close']} ({nifty and nifty['pct_change']}%)")
+    print(f"  Sensex:    {sensex and sensex['close']}")
+    print(f"  BankNifty: {banknifty and banknifty['close']}")
+    print(f"  USD/INR:   {market.get('usdinr') and market['usdinr']['close']}")
+    print(f"  Crude:     {market.get('crude') and market['crude']['close']}")
 
-    # 1. Nifty index
-    nifty_index = None
-    try:
-        nifty_index = fetch_nifty_index()
-        print(f"Nifty 50: {nifty_index['last']} ({nifty_index['pChange']}%)")
-    except Exception as e:
-        print(f"NSE Nifty fetch failed ({e}), trying yfinance...")
-        try:
-            nifty_index = fetch_nifty_yfinance()
-            print(f"Nifty 50 (yfinance): {nifty_index['last']} ({nifty_index['pChange']}%)")
-        except Exception as e2:
-            print(f"yfinance Nifty also failed: {e2}")
-            fallback_notes.append("Nifty 50: could not fetch index data.")
+    # 2. Gainers / Losers (yfinance batch — all 211 F&O stocks)
+    print("\nFetching gainers/losers (yfinance batch)...")
+    movers = get_top_gainers_losers(n=5)
+    gainers = movers.get("gainers", [])
+    losers  = movers.get("losers", [])
+    print(f"  Gainers: {len(gainers)}, Losers: {len(losers)}")
 
-    # 1b. Bank Nifty (NSE API — far more relevant for F&O than Sensex)
-    banknifty_index = None
-    try:
-        banknifty_index = fetch_nifty_index("NIFTY BANK")
-        print(f"Bank Nifty: {banknifty_index['last']} ({banknifty_index['pChange']}%)")
-    except Exception as e:
-        print(f"Bank Nifty fetch failed ({e}), trying yfinance...")
-        try:
-            import yfinance as yf
-            t = yf.Ticker("^NSEBANK")
-            h = t.history(period="2d")
-            if not h.empty:
-                closes = h["Close"].tolist()
-                last = closes[-1]
-                prev = closes[-2] if len(closes) >= 2 else last
-                ch = last - prev
-                banknifty_index = {"last": round(last, 2), "change": round(ch, 2), "pChange": round(ch / prev * 100 if prev else 0, 2)}
-        except Exception as e2:
-            print(f"Bank Nifty yfinance also failed: {e2}")
+    # 3. FII/DII (Trendlyne → RSS fallback)
+    print("\nFetching FII/DII...")
+    fii_dii = get_fii_dii_data()
+    print(f"  FII: {fii_dii.get('fii_net')}  DII: {fii_dii.get('dii_net')}  [src: {fii_dii.get('source')}]")
 
-    # 1c. FII/DII
-    fii_dii = {}
-    try:
-        fii_dii = fetch_fii_dii()
-        print(f"FII net: {fii_dii.get('fii_net')}  DII net: {fii_dii.get('dii_net')}")
-    except Exception as e:
-        print(f"FII/DII fetch failed ({e}) — NSE blocks non-Indian IPs.")
-        fallback_notes.append("FII/DII flows: not available (NSE blocks GitHub Actions IPs).")
-
-    # 2. F&O universe
-    universe = []
-    try:
-        universe = fetch_fno_universe()
-        print(f"F&O universe: {len(universe)} stocks fetched.")
-    except Exception as e:
-        print(f"F&O universe fetch failed ({e}).")
-        fallback_notes.append("F&O universe: NSE blocked.")
-
-    # 3. Gainers / Losers
-    gainers: list = []
-    losers: list = []
-    try:
-        gl = fetch_gainers_losers()
-        gainers = gl.get("gainers", [])
-        losers = gl.get("losers", [])
-        print(f"Gainers: {len(gainers)}, Losers: {len(losers)}")
-    except Exception as e:
-        print(f"Gainers/losers NSE fetch failed ({e}), trying yfinance...")
-        try:
-            from src.fno_stocks import PRIORITY_SYMBOLS
-            gl = fetch_gainers_losers_yfinance(PRIORITY_SYMBOLS)
-            gainers = gl.get("gainers", [])
-            losers = gl.get("losers", [])
-            print(f"Gainers (yfinance): {len(gainers)}, Losers (yfinance): {len(losers)}")
-            fallback_notes.append("Gainers/losers: sourced from Yahoo Finance (NSE blocked).")
-        except Exception as e2:
-            print(f"yfinance gainers/losers also failed: {e2}")
-            fallback_notes.append("Gainers/losers: no data available.")
-
-    # 4. F&O ban list
-    ban_list: list[str] = []
+    # 4. F&O ban list (5paisa → NSE CSV fallback)
+    print("\nFetching F&O ban list...")
+    ban_list = []
     try:
         ban_list = fetch_ban_list()
-        print(f"F&O ban list: {len(ban_list)} stocks.")
+        print(f"  Banned: {ban_list or 'None'}")
     except Exception as e:
-        print(f"Ban list fetch failed ({e}).")
-        fallback_notes.append("F&O ban list: NSE blocked — verify at nseindia.com.")
+        print(f"  Ban list failed: {e}")
 
-    # 5. Corporate actions
-    corporate_actions: list = []
+    # 5. Corporate actions (NSE API — may be empty if blocked)
+    print("\nFetching corporate actions...")
+    corporate_actions = []
     try:
         corporate_actions = fetch_corporate_actions()
-        print(f"Corporate actions: {len(corporate_actions)} fetched.")
+        print(f"  Corporate actions: {len(corporate_actions)}")
     except Exception as e:
-        print(f"Corporate actions fetch failed ({e}).")
-        fallback_notes.append("Corporate actions: NSE blocked.")
+        print(f"  Corporate actions failed: {e}")
 
-    # 6. News (RSS)
-    news_items: list = []
+    # 6. News (RSS — always works)
+    print("\nFetching news (RSS)...")
+    news_items = []
     try:
         news_items = fetch_news(max_items=15)
-        print(f"News items: {len(news_items)} fetched.")
+        print(f"  News items: {len(news_items)}")
     except Exception as e:
-        print(f"News fetch failed ({e}).")
+        print(f"  News failed: {e}")
 
-    # 7. Brokerage calls
-    broker_calls: list = []
+    # 7. Match move reasons from news
+    all_text = [(n.get("title","") + " " + n.get("summary","")) for n in news_items]
+    for mover in gainers + losers:
+        sym = mover["symbol"]
+        for text in all_text:
+            if sym in text.upper():
+                mover["reason"] = next((n["title"] for n in news_items if sym in (n.get("title","") + n.get("summary","")).upper()), "")
+                break
+
+    # 8. Brokerage calls (RSS)
+    print("\nFetching brokerage calls...")
+    broker_calls = []
     try:
         broker_calls = fetch_brokerage_calls(date_str=date_iso)
-        print(f"Brokerage calls: {len(broker_calls)} fetched.")
+        print(f"  Brokerage calls: {len(broker_calls)}")
     except Exception as e:
-        print(f"Brokerage calls fetch failed ({e}).")
+        print(f"  Brokerage calls failed: {e}")
 
-    # 8. Build HTML
+    # 9. Build HTML
+    print("\nBuilding HTML...")
     html = build_html(
         date_str=date_str,
-        nifty_index=nifty_index,
-        banknifty_index=banknifty_index,
+        nifty_index=_to_index_dict(nifty),
+        banknifty_index=_to_index_dict(banknifty),
+        sensex_index=_to_index_dict(sensex),
+        market_extras=market,
         fii_dii=fii_dii,
         gainers=gainers,
         losers=losers,
@@ -192,24 +149,23 @@ def main() -> None:
         corporate_actions=corporate_actions,
         news_items=news_items,
         ban_list=ban_list,
-        fallback_notes=fallback_notes,
-        universe_count=len(universe),
+        fallback_notes=[],
+        universe_count=len(gainers) + len(losers),
     )
 
-    # 9. Save to docs/ and archive/
-    docs_dir = Path(__file__).parent.parent / "docs"
+    # 10. Save
+    docs_dir    = Path(__file__).parent.parent / "docs"
     archive_dir = Path(__file__).parent.parent / "archive"
     docs_dir.mkdir(exist_ok=True)
     archive_dir.mkdir(exist_ok=True)
-
     (docs_dir / "index.html").write_text(html, encoding="utf-8")
     (archive_dir / f"{date_iso}.html").write_text(html, encoding="utf-8")
-    print(f"Digest HTML saved to docs/index.html and archive/{date_iso}.html")
+    print(f"\nDigest saved → docs/index.html and archive/{date_iso}.html")
 
-    # 10. Send email
+    # 11. Send email
     gmail_user = os.getenv("GMAIL_USER", "")
     gmail_pass = os.getenv("GMAIL_APP_PASSWORD", "")
-    recipient = os.getenv("RECIPIENT_EMAIL", "Khushbanthia@gmail.com")
+    recipient  = os.getenv("RECIPIENT_EMAIL", "Khushbanthia@gmail.com")
     if gmail_user and gmail_pass:
         try:
             send_link_email(date_str, recipient, gmail_user, gmail_pass)
@@ -219,6 +175,17 @@ def main() -> None:
     else:
         print("No Gmail credentials — skipping email.")
         sys.exit(1)
+
+
+def _to_index_dict(d: dict | None) -> dict | None:
+    """Convert market_data dict keys to html_builder expected keys."""
+    if not d:
+        return None
+    return {
+        "last":    d.get("close"),
+        "change":  d.get("change"),
+        "pChange": d.get("pct_change"),
+    }
 
 
 if __name__ == "__main__":
