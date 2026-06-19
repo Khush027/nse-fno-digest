@@ -230,17 +230,43 @@ async function main() {
   });
 
   const subject = `NSE F&O Morning Digest – ${dateDisplay}`;
+  const PAGES_URL = 'https://khush027.github.io/nse-fno-digest/';
+
+  // 12. Save HTML to docs/ (always, even before send, so it's preserved on failure)
+  const fs = require('fs');
+  const path = require('path');
+  const docsDir = path.join(__dirname, '..', 'docs');
+  const archiveDir = path.join(docsDir, 'archive');
+  fs.mkdirSync(archiveDir, { recursive: true });
+  fs.writeFileSync(path.join(docsDir, 'index.html'), htmlBody);
+  fs.writeFileSync(path.join(archiveDir, `${dateISO}.html`), htmlBody);
+  console.log(`Digest HTML saved to docs/index.html`);
+
+  // 13. Build short link email
+  const linkEmailHtml = `<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f6f9; padding: 32px; color: #222;">
+  <div style="max-width: 500px; margin: 0 auto; background: #fff; border-radius: 10px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    <div style="background: linear-gradient(135deg, #1a237e, #283593); border-radius: 8px; padding: 20px 24px; margin-bottom: 24px; color: #fff;">
+      <h2 style="margin: 0; font-size: 1.2rem;">📈 NSE F&amp;O Morning Digest</h2>
+      <p style="margin: 6px 0 0; opacity: 0.85; font-size: 0.88rem;">${dateDisplay} — Ready to read</p>
+    </div>
+    <p style="margin: 0 0 20px; font-size: 0.95rem; color: #444;">Your daily NSE F&amp;O digest has been generated. Click below to view the full report:</p>
+    <a href="${PAGES_URL}" style="display: inline-block; background: #1a237e; color: #fff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 0.95rem;">View Today's Digest →</a>
+    <p style="margin: 20px 0 0; font-size: 0.78rem; color: #999;">Or copy this link: ${PAGES_URL}</p>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;"/>
+    <p style="margin: 0; font-size: 0.75rem; color: #bbb;">For informational purposes only. Not investment advice.</p>
+  </div>
+</body>
+</html>`;
 
   if (isDryRun) {
-    const fs = require('fs');
-    const outPath = `/tmp/digest-preview-${Date.now()}.html`;
-    fs.writeFileSync(outPath, htmlBody);
-    console.log(`\n[DRY RUN] HTML preview saved to: ${outPath}`);
+    console.log(`\n[DRY RUN] Digest link: ${PAGES_URL}`);
     console.log(`Subject: ${subject}`);
     return;
   }
 
-  // 12. Send email
+  // 14. Send link email
   const gmailUser = process.env.GMAIL_USER;
   const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
   const recipientEmail = process.env.RECIPIENT_EMAIL || 'khushbanthia@gmail.com';
@@ -248,12 +274,12 @@ async function main() {
   if (!gmailUser || !gmailAppPassword) {
     console.error('ERROR: GMAIL_USER and GMAIL_APP_PASSWORD environment variables are required.');
     console.error('Set them in your environment or .env file.');
-    createDraft({ subject, htmlBody, to: recipientEmail });
+    createDraft({ subject, htmlBody: linkEmailHtml, to: recipientEmail });
     process.exit(1);
   }
 
   try {
-    await sendDigest({ subject, htmlBody, to: recipientEmail, gmailUser, gmailAppPassword });
+    await sendDigest({ subject, htmlBody: linkEmailHtml, to: recipientEmail, gmailUser, gmailAppPassword });
     console.log(`Digest sent to ${recipientEmail}`);
   } catch (err) {
     console.error(`Failed to send digest: ${err.message}`);
