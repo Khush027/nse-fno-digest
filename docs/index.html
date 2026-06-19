@@ -6,38 +6,92 @@
 <title>NSE F&amp;O Morning Digest &mdash; 19-Jun-2026</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f6f9; color: #222; padding: 16px; }
-.container { max-width: 800px; margin: 0 auto; }
-.header { background: linear-gradient(135deg, #1a237e, #283593); color: #fff; border-radius: 10px; padding: 24px 28px; margin-bottom: 20px; }
-.header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: 0.5px; }
-.header .subtitle { font-size: 0.9rem; opacity: 0.85; margin-top: 6px; }
-.header .meta { display: flex; gap: 20px; margin-top: 14px; font-size: 0.82rem; opacity: 0.8; }
-.market-bar { background: #fff; border-radius: 8px; padding: 14px 20px; display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); font-size: 0.88rem; }
-.market-bar .stat { display: flex; flex-direction: column; gap: 2px; }
-.market-bar .stat .label { color: #666; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.4px; }
-.market-bar .stat .value { font-weight: 700; font-size: 1rem; }
-.up { color: #2e7d32; } .down { color: #c62828; } .flat { color: #555; }
-.section { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 18px; overflow: hidden; }
-.section-header { padding: 12px 20px; font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 8px; letter-spacing: 0.3px; }
-.section-body { padding: 14px 20px; }
-.sh-red { background: #ffebee; color: #b71c1c; border-left: 4px solid #e53935; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eef0f5; color: #1a1a2e; padding: 20px 16px; font-size: 14px; }
+.container { max-width: 860px; margin: 0 auto; }
+
+/* Header */
+.header { background: linear-gradient(135deg, #0d1b4b 0%, #1a3a8f 60%, #1565c0 100%); color: #fff; border-radius: 14px; padding: 28px 32px 24px; margin-bottom: 16px; position: relative; overflow: hidden; }
+.header::after { content: ''; position: absolute; right: -40px; top: -40px; width: 220px; height: 220px; background: rgba(255,255,255,0.04); border-radius: 50%; }
+.header h1 { font-size: 1.55rem; font-weight: 800; letter-spacing: 0.3px; }
+.header .subtitle { font-size: 0.88rem; opacity: 0.78; margin-top: 5px; }
+.header .meta { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 16px; }
+.header .meta-item { font-size: 0.78rem; opacity: 0.7; display: flex; align-items: center; gap: 5px; }
+
+/* Market snapshot bar */
+.snapshot { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.snap-card { background: #fff; border-radius: 10px; padding: 14px 16px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); }
+.snap-card .s-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.6px; color: #888; margin-bottom: 4px; }
+.snap-card .s-val { font-size: 1.05rem; font-weight: 800; }
+.snap-card .s-sub { font-size: 0.72rem; color: #999; margin-top: 2px; }
+.up { color: #1b8a4a; } .down { color: #d32f2f; } .flat { color: #666; }
+
+/* Sections */
+.section { background: #fff; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); margin-bottom: 14px; overflow: hidden; }
+.section-header { padding: 13px 20px; font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 8px; letter-spacing: 0.2px; }
+.section-body { padding: 4px 20px 16px; }
+
+/* Section header colours */
+.sh-green  { background: #e8f5e9; color: #1b5e20; border-left: 4px solid #43a047; }
+.sh-red    { background: #ffebee; color: #b71c1c; border-left: 4px solid #e53935; }
 .sh-orange { background: #fff3e0; color: #bf360c; border-left: 4px solid #fb8c00; }
-.sh-blue { background: #e3f2fd; color: #0d47a1; border-left: 4px solid #1e88e5; }
+.sh-blue   { background: #e3f2fd; color: #0d47a1; border-left: 4px solid #1e88e5; }
 .sh-purple { background: #f3e5f5; color: #4a148c; border-left: 4px solid #8e24aa; }
-.sh-teal { background: #e0f2f1; color: #004d40; border-left: 4px solid #00897b; }
+.sh-teal   { background: #e0f2f1; color: #004d40; border-left: 4px solid #00897b; }
+.sh-indigo { background: #e8eaf6; color: #1a237e; border-left: 4px solid #3949ab; }
+
+/* Mover cards */
+.movers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 12px; }
+.mover-card { border-radius: 8px; padding: 12px 14px; }
+.mover-card.gain { background: #f1faf3; border: 1px solid #a5d6a7; }
+.mover-card.loss { background: #fff5f5; border: 1px solid #ef9a9a; }
+.mover-card .mc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.mover-card .mc-sym { font-weight: 800; font-size: 0.9rem; }
+.mover-card.gain .mc-sym { color: #1b5e20; }
+.mover-card.loss .mc-sym { color: #b71c1c; }
+.mover-card .mc-pct { font-weight: 700; font-size: 0.9rem; padding: 2px 8px; border-radius: 12px; }
+.mover-card.gain .mc-pct { background: #c8e6c9; color: #1b5e20; }
+.mover-card.loss .mc-pct { background: #ffcdd2; color: #b71c1c; }
+.mover-card .mc-price { font-size: 0.75rem; color: #777; }
+.mover-card .mc-reason { font-size: 0.75rem; color: #555; margin-top: 6px; line-height: 1.45; font-style: italic; border-top: 1px solid rgba(0,0,0,0.06); padding-top: 5px; }
+
+/* News list */
 ul.news { list-style: none; padding: 0; }
-ul.news li { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.875rem; line-height: 1.55; }
+ul.news li { padding: 10px 0; border-bottom: 1px solid #f2f2f2; font-size: 0.85rem; line-height: 1.6; }
 ul.news li:last-child { border-bottom: none; }
-.sym { font-weight: 700; background: #e8eaf6; color: #283593; padding: 1px 6px; border-radius: 4px; font-size: 0.8rem; }
+ul.news li:first-child { padding-top: 12px; }
+
+/* Brokerage table */
+.broker-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.82rem; }
+.broker-table th { background: #f0f2f8; color: #444; font-weight: 700; padding: 8px 10px; text-align: left; border-bottom: 2px solid #dde1ef; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.4px; }
+.broker-table td { padding: 9px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+.broker-table tr:last-child td { border-bottom: none; }
+.broker-table tr:hover td { background: #fafbff; }
+
+/* Chips & tags */
+.sym { font-weight: 700; background: #e8eaf6; color: #283593; padding: 2px 7px; border-radius: 4px; font-size: 0.78rem; }
 .sym-red { background: #ffcdd2; color: #b71c1c; }
 .sym-green { background: #c8e6c9; color: #1b5e20; }
-.tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
-.tag-buy { background: #c8e6c9; color: #1b5e20; }
-.tag-sell { background: #ffcdd2; color: #b71c1c; }
-.tag-div { background: #e3f2fd; color: #0d47a1; }
-.ban-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.ban-chip { background: #ffcdd2; color: #b71c1c; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
-.footer { text-align: center; font-size: 0.75rem; color: #999; padding: 16px 0 8px; margin-top: 8px; }
+.tag { display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 7px; border-radius: 10px; margin-left: 4px; vertical-align: middle; letter-spacing: 0.2px; }
+.tag-buy    { background: #c8e6c9; color: #1b5e20; }
+.tag-sell   { background: #ffcdd2; color: #b71c1c; }
+.tag-hold   { background: #fff9c4; color: #795548; }
+.tag-div    { background: #e3f2fd; color: #0d47a1; }
+.tag-bonus  { background: #f3e5f5; color: #6a1b9a; }
+.tag-split  { background: #e8f5e9; color: #2e7d32; }
+.tag-order  { background: #fff8e1; color: #e65100; }
+
+.ban-chips { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; }
+.ban-chip { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; padding: 5px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+.ban-note { font-size: 0.75rem; color: #999; margin-top: 10px; line-height: 1.5; }
+
+/* Footer */
+.footer { text-align: center; font-size: 0.72rem; color: #aaa; padding: 18px 0 6px; margin-top: 4px; line-height: 1.7; }
+.footer a { color: #888; }
+
+@media (max-width: 600px) {
+  .movers-grid { grid-template-columns: 1fr; }
+  .snapshot { grid-template-columns: 1fr 1fr; }
+}
 </style>
 </head>
 <body>
@@ -45,67 +99,195 @@ ul.news li:last-child { border-bottom: none; }
 
 <div class="header">
   <h1>&#128200; NSE F&amp;O Morning Digest</h1>
-  <div class="subtitle">Friday, 19 June 2026 &nbsp;|&nbsp; NSE F&amp;O Universe (~200+ stocks)</div>
+  <div class="subtitle">Your daily pre-market briefing for NSE F&amp;O stocks</div>
   <div class="meta">
-    <span>&#9200; Generated at 8:00 AM IST</span>
-    <span>&#128197; Last trading day: Thursday, 18 June 2026</span>
+    <span class="meta-item">&#128197; Friday, 19 June 2026</span>
+    <span class="meta-item">&#9200; Generated 8:00 AM IST</span>
+    <span class="meta-item">&#128218; Prev session: Thursday, 18 June 2026</span>
+    
   </div>
 </div>
 
-<div class="market-bar">
-  <div class="stat">
-    <span class="label">Nifty 50</span>
-    <span class="value"><span class="down">23,993.15</span></span>
+<div class="snapshot">
+  <div class="snap-card">
+    <div class="s-label">&#127754; Nifty 50</div>
+    <div class="s-val down">23,971.10</div><div class="s-sub down">-0.81% (-196.90)</div>
   </div>
-  <div class="stat">
-    <span class="label">Change</span>
-    <span class="value"><span class="down">-0.72% (-174.85)</span></span>
+  <div class="snap-card">
+    <div class="s-label">&#128200; Sensex</div>
+    <div class="s-val flat">See BSE</div>
+    <div class="s-sub">bseindia.com</div>
   </div>
-  <div class="stat">
-    <span class="label">FII (prev day)</span>
-    <span class="value"><span class="flat">See nseindia.com</span></span>
+  <div class="snap-card">
+    <div class="s-label">&#127758; FII Flow</div>
+    <div class="s-val flat">—</div>
   </div>
-  <div class="stat">
-    <span class="label">DII (prev day)</span>
-    <span class="value"><span class="flat">See nseindia.com</span></span>
+  <div class="snap-card">
+    <div class="s-label">&#127968; DII Flow</div>
+    <div class="s-val flat">—</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header sh-green">&#128994; Top Gainers &mdash; Previous Session</div>
+  <div class="section-body"><div class="movers-grid"><div class="mover-card gain">
+      <div class="mc-top">
+        <span class="mc-sym">BHARTIARTL</span>
+        <span class="mc-pct">+0.00%</span>
+      </div>
+      <div class="mc-price"></div>
+      
+    </div><div class="mover-card gain">
+      <div class="mc-top">
+        <span class="mc-sym">ETERNAL</span>
+        <span class="mc-pct">+0.00%</span>
+      </div>
+      <div class="mc-price"></div>
+      
+    </div><div class="mover-card gain">
+      <div class="mc-top">
+        <span class="mc-sym">POWERGRID</span>
+        <span class="mc-pct">+0.00%</span>
+      </div>
+      <div class="mc-price"></div>
+      
+    </div><div class="mover-card gain">
+      <div class="mc-top">
+        <span class="mc-sym">NTPC</span>
+        <span class="mc-pct">+0.00%</span>
+      </div>
+      <div class="mc-price"></div>
+      
+    </div><div class="mover-card gain">
+      <div class="mc-top">
+        <span class="mc-sym">ADANIENT</span>
+        <span class="mc-pct">+0.00%</span>
+      </div>
+      <div class="mc-price"></div>
+      
+    </div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header sh-red">&#128308; Top Losers &mdash; Previous Session</div>
+  <div class="section-body"><div class="movers-grid"><div class="mover-card loss">
+      <div class="mc-top">
+        <span class="mc-sym">INFY</span>
+        <span class="mc-pct">0.00%</span>
+      </div>
+      <div class="mc-price"></div>
+      
+    </div><div class="mover-card loss">
+      <div class="mc-top">
+        <span class="mc-sym">TCS</span>
+        <span class="mc-pct">0.00%</span>
+      </div>
+      <div class="mc-price"></div>
+      
+    </div><div class="mover-card loss">
+      <div class="mc-top">
+        <span class="mc-sym">TECHM</span>
+        <span class="mc-pct">0.00%</span>
+      </div>
+      <div class="mc-price"></div>
+      
+    </div><div class="mover-card loss">
+      <div class="mc-top">
+        <span class="mc-sym">HCLTECH</span>
+        <span class="mc-pct">0.00%</span>
+      </div>
+      <div class="mc-price"></div>
+      
+    </div><div class="mover-card loss">
+      <div class="mc-top">
+        <span class="mc-sym">WIPRO</span>
+        <span class="mc-pct">0.00%</span>
+      </div>
+      <div class="mc-price"></div>
+      
+    </div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header sh-indigo">&#128203; Brokerage &amp; Analyst Calls</div>
+  <div class="section-body">
+    <table class="broker-table">
+      <thead><tr><th>Stock</th><th>Broker</th><th>Action</th><th>Target</th><th>Rationale</th></tr></thead>
+      <tbody><tr>
+      <td style="font-weight:600;color:#283593;">Emkay</td>
+      <td style="text-transform:capitalize;">emkay</td>
+      <td><span class="tag ">—</span></td>
+      <td>—</td>
+      <td style="color:#555;">Latest research reports by Emkay, with share price targets forecast and upsides. Search by broker names to get access to</td>
+    </tr><tr>
+      <td style="font-weight:600;color:#283593;">Brokerage/Research</td>
+      <td style="text-transform:capitalize;">—</td>
+      <td><span class="tag tag-buy">BUY</span></td>
+      <td>—</td>
+      <td style="color:#555;">Latest broker research reports with buy recommendations along with share price targets forecast and upside. Browse thous</td>
+    </tr><tr>
+      <td style="font-weight:600;color:#283593;">Emkay</td>
+      <td style="text-transform:capitalize;">emkay</td>
+      <td><span class="tag ">—</span></td>
+      <td>—</td>
+      <td style="color:#555;">Ipca Laboratories 02 Jun 2026 Sharp price-value disconnect emerging Company Update Read Report</td>
+    </tr><tr>
+      <td style="font-weight:600;color:#283593;">Brokerage</td>
+      <td style="text-transform:capitalize;">—</td>
+      <td><span class="tag ">—</span></td>
+      <td>—</td>
+      <td style="color:#555;">Access the latest brokerage and research reports on Indian stocks to make informed investment decisions based on expert </td>
+    </tr><tr>
+      <td style="font-weight:600;color:#283593;">Stock</td>
+      <td style="text-transform:capitalize;">axis</td>
+      <td><span class="tag ">—</span></td>
+      <td>—</td>
+      <td style="color:#555;">Get accurate and insightful reports on Mutual Funds and Stock Markets by Axis Direct. Find the inside story on Equity Ma</td>
+    </tr><tr>
+      <td style="font-weight:600;color:#283593;">Why</td>
+      <td style="text-transform:capitalize;">goldman</td>
+      <td><span class="tag ">—</span></td>
+      <td>—</td>
+      <td style="color:#555;">India's power and chemicals sectors are gaining investor attention as leading global brokerages project strong earnings </td>
+    </tr><tr>
+      <td style="font-weight:600;color:#283593;">2026</td>
+      <td style="text-transform:capitalize;">goldman</td>
+      <td><span class="tag ">—</span></td>
+      <td>—</td>
+      <td style="color:#555;">Forecasts from the center of capital markets on equity market trends, GDP growth, and more. Insights from bankers, trade</td>
+    </tr><tr>
+      <td style="font-weight:600;color:#283593;">Reports</td>
+      <td style="text-transform:capitalize;">goldman</td>
+      <td><span class="tag ">—</span></td>
+      <td>—</td>
+      <td style="color:#555;">Our weekly newsletter delivers the latest insights on economic forces shaping markets—from Goldman Sachs leaders, econom</td>
+    </tr></tbody>
+    </table>
   </div>
 </div>
 
 <div class="section">
-  <div class="section-header sh-orange">&#128201; Price/Volume Breakouts</div>
-  <div class="section-body"><ul class="news"><li><span class="sym sym-green">BHARTIARTL</span> &mdash; UP 1.61% @ &#8377;1905.00 — top F&amp;O gainer</li><li><span class="sym sym-green">ETERNAL</span> &mdash; UP 1.14% @ &#8377;261.50 — top F&amp;O gainer</li><li><span class="sym sym-green">NTPC</span> &mdash; UP 1.06% @ &#8377;365.80 — top F&amp;O gainer</li><li><span class="sym sym-green">POWERGRID</span> &mdash; UP 1.02% @ &#8377;291.65 — top F&amp;O gainer</li><li><span class="sym sym-green">JIOFIN</span> &mdash; UP 0.79% @ &#8377;246.03 — top F&amp;O gainer</li><li><span class="sym sym-red">INFY</span> &mdash; DOWN -7.52% @ &#8377;1042.70 — top F&amp;O loser</li><li><span class="sym sym-red">TCS</span> &mdash; DOWN -5.34% @ &#8377;2085.70 — top F&amp;O loser</li><li><span class="sym sym-red">TECHM</span> &mdash; DOWN -4.14% @ &#8377;1387.80 — top F&amp;O loser</li></ul></div>
+  <div class="section-header sh-blue">&#128197; Corporate Actions &mdash; Dividends, Splits &amp; Bonuses</div>
+  <div class="section-body"><ul class="news"><li><span class="sym">AWL</span> <span class="tag tag-div">DIV</span> Dividend - Re 1 Per Share &nbsp;<small style="color:#888;">Ex: 19-Jun-2026</small></li><li><span class="sym">RPEL</span> <span class="tag tag-div">DIV</span> Dividend - Re 1 Per Share &nbsp;<small style="color:#888;">Ex: 19-Jun-2026</small></li><li><span class="sym">POLYCAB</span> <span class="tag tag-div">DIV</span> Dividend - Rs 47 Per Share &nbsp;<small style="color:#888;">Ex: 19-Jun-2026</small></li><li><span class="sym">CORONA</span> <span class="tag tag-div">DIV</span> Dividend - Rs 10 Per Share &nbsp;<small style="color:#888;">Ex: 19-Jun-2026</small></li><li><span class="sym">DBEIL</span> <span class="tag tag-split">SPLIT</span> Face Value Split (Sub-Division) - From Rs 10/- Per Share To Re 1/- Per Share &nbsp;<small style="color:#888;">Ex: 19-Jun-2026</small></li><li><span class="sym">SANOFICONR</span> <span class="tag tag-div">DIV</span> Dividend - Rs 75 Per Share &nbsp;<small style="color:#888;">Ex: 19-Jun-2026</small></li><li><span class="sym">HDFCLIFE</span> <span class="tag tag-div">DIV</span> Dividend - Rs 2.10 Per Share &nbsp;<small style="color:#888;">Ex: 19-Jun-2026</small></li><li><span class="sym">TMPV</span> <span class="tag tag-div">DIV</span> Dividend - Rs 3 Per Share &nbsp;<small style="color:#888;">Ex: 19-Jun-2026</small></li><li><span class="sym">TORNTPOWER</span> <span class="tag tag-div">DIV</span> Dividend - Rs 5 Per Share &nbsp;<small style="color:#888;">Ex: 19-Jun-2026</small></li><li><span class="sym">HDFCBANK</span> <span class="tag tag-div">DIV</span> Dividend - Rs 13 Per Share &nbsp;<small style="color:#888;">Ex: 19-Jun-2026</small></li></ul></div>
 </div>
 
-<div class="section">
-  <div class="section-header sh-blue">&#128203; Corporate Actions — Record Dates &amp; Dividends</div>
-  <div class="section-body"><ul class="news"><li><span class="sym ">AWL</span> <span class="tag tag-div">DIVIDEND</span> — Dividend - Re 1 Per Share | Ex-date: 19-Jun-2026</li><li><span class="sym ">RPEL</span> <span class="tag tag-div">DIVIDEND</span> — Dividend - Re 1 Per Share | Ex-date: 19-Jun-2026</li><li><span class="sym ">POLYCAB</span> <span class="tag tag-div">DIVIDEND</span> — Dividend - Rs 47 Per Share | Ex-date: 19-Jun-2026</li><li><span class="sym ">CORONA</span> <span class="tag tag-div">DIVIDEND</span> — Dividend - Rs 10 Per Share | Ex-date: 19-Jun-2026</li><li><span class="sym ">DBEIL</span> <span class="tag tag-div">SPLIT</span> — Face Value Split (Sub-Division) - From Rs 10/- Per Share To Re 1/- Per Share | Ex-date: 19-Jun-2026</li><li><span class="sym ">SANOFICONR</span> <span class="tag tag-div">DIVIDEND</span> — Dividend - Rs 75 Per Share | Ex-date: 19-Jun-2026</li><li><span class="sym ">HDFCLIFE</span> <span class="tag tag-div">DIVIDEND</span> — Dividend - Rs 2.10 Per Share | Ex-date: 19-Jun-2026</li><li><span class="sym ">TMPV</span> <span class="tag tag-div">DIVIDEND</span> — Dividend - Rs 3 Per Share | Ex-date: 19-Jun-2026</li></ul></div>
-</div>
-
-<div class="section">
-  <div class="section-header sh-teal">&#128202; News &amp; Broker Calls</div>
-  <div class="section-body"><ul class="news"><li>Latest broker/analyst price and recommendation upgrades, Indian Stocks ... — Broker Research reports: latest Upgrades for all stocks Reco - This broker has downgraded this stock from it's previous report. (eg. - Buy->Hold) Targ</li><li>Ratings — Analyst Upgrades & Downgrades | Earnings Pulse — Daily analyst actions on Indian stocks — brokerage upgrades, downgrades, target price changes, and new coverage initiations from top brokers.</li><li>Analyst Upgrades & Downgrades - Daily Stock Price Targets & Real-Time ... — MEYKA AI's Analyst Upgrades & Downgrades Tracker delivers structured, real-time access to daily stock price targets and analyst ratings, covering stoc</li><li>Latest broker/analyst price recommendation and price downgrades, Indian ... — View all recent Stock price and stock recommendation downgrades by brokers. Browse thousands of reports available.</li></ul></div>
-</div>
 
 
 
 <div class="section">
   <div class="section-header sh-red">&#9888;&#65039; F&amp;O Ban Period</div>
-  <div class="section-body"><p style="color:#888;font-size:0.875rem;">No stocks in F&amp;O ban period today.</p></div>
+  <div class="section-body"><p style="color:#999;padding:12px 0;font-size:0.85rem;">No stocks in F&amp;O ban period today.</p></div>
 </div>
 
-<div class="section">
-  <div class="section-header sh-teal">&#128197; Key Dates Ahead</div>
-  <div class="section-body"><p style="color:#888;font-size:0.875rem;">No upcoming board meetings in the next 7 days.</p></div>
-</div>
 
 <div class="section">
-  <div class="section-header sh-orange">&#128221; Data Notes</div>
-  <div class="section-body"><ul class="news"><li>F&O universe: fetched via web search (NSE blocked).</li><li>F&O ban list: NSE blocked, verify at nseindia.com.</li></ul></div>
+  <div class="section-header sh-orange">&#128221; Data Source Notes</div>
+  <div class="section-body"><ul class="news"><li style="color:#999;">&#9432; F&amp;O universe: fetched via web search (NSE blocked).</li><li style="color:#999;">&#9432; F&amp;O ban list: NSE blocked, verify at nseindia.com.</li></ul></div>
 </div>
 
 <div class="footer">
-  NSE F&amp;O Morning Digest &nbsp;|&nbsp; Auto-generated &nbsp;|&nbsp; 19-Jun-2026, 8:00 AM IST<br/>
-  <em>For informational purposes only. Not investment advice. Always verify with official NSE/BSE sources.</em>
+  NSE F&amp;O Morning Digest &nbsp;&bull;&nbsp; Auto-generated at 8:00 AM IST &nbsp;&bull;&nbsp; 19-Jun-2026<br/>
+  Data sourced from NSE India, web searches. &nbsp;<em>Not investment advice. Verify before trading.</em>
 </div>
 </div>
 </body>
