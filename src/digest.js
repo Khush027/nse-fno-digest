@@ -53,7 +53,7 @@ function niftyClass(pChange) {
   return 'flat';
 }
 
-function buildMarketBar(niftyIndex, fiiDiiResults) {
+function buildMarketBar(niftyIndex, fiiDiiResults, niftyWebSummary) {
   const last = niftyIndex ? niftyIndex.last : null;
   const change = niftyIndex ? niftyIndex.change : null;
   const pChange = niftyIndex ? niftyIndex.pChange : null;
@@ -65,13 +65,22 @@ function buildMarketBar(niftyIndex, fiiDiiResults) {
     ? `<span class="${cls}">${Number(last).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
     : '<span class="flat">N/A</span>';
 
+  // If niftyVal is N/A and niftyWebSummary is available, show it instead
+  const niftyDisplay = (last != null) ? niftyVal
+    : niftyWebSummary
+      ? `<span class="flat" style="font-size:0.82rem;">${niftyWebSummary.slice(0, 150)}</span>`
+      : '<span class="flat">N/A</span>';
+
   const niftyChg = pChange != null
     ? `<span class="${cls}">${sign}${parseFloat(pChange).toFixed(2)}% (${sign}${formatPrice(change)})</span>`
     : '<span class="flat">N/A</span>';
 
-  // Extract FII/DII snippet from web search result
+  // FII/DII: accept either a plain string summary or legacy array of search results
   let fiiDiiHtml = '<span class="flat">See nseindia.com</span>';
-  if (Array.isArray(fiiDiiResults) && fiiDiiResults.length > 0) {
+  if (typeof fiiDiiResults === 'string' && fiiDiiResults.length > 0) {
+    const snippet = fiiDiiResults.slice(0, 120);
+    fiiDiiHtml = `<span class="flat" title="${snippet}">${snippet}</span>`;
+  } else if (Array.isArray(fiiDiiResults) && fiiDiiResults.length > 0) {
     const r = fiiDiiResults[0];
     const snippet = (r.snippet || r.title || '').slice(0, 120);
     fiiDiiHtml = `<span class="flat" title="${snippet}">${snippet}</span>`;
@@ -81,7 +90,7 @@ function buildMarketBar(niftyIndex, fiiDiiResults) {
 <div class="market-bar">
   <div class="stat">
     <span class="label">Nifty 50</span>
-    <span class="value">${niftyVal}</span>
+    <span class="value">${niftyDisplay}</span>
   </div>
   <div class="stat">
     <span class="label">Change</span>
@@ -94,11 +103,30 @@ function buildMarketBar(niftyIndex, fiiDiiResults) {
 </div>`;
 }
 
-function buildBreakoutsSection(universe, gainersLosers) {
+function buildBreakoutsSection(universe, gainersLosers, researchedBreakouts) {
   const MAX = 8;
   let items = [];
 
-  if (Array.isArray(universe) && universe.length > 0) {
+  // Use researched breakouts (with reasons) if available, else fall back to raw universe
+  const breakoutSource = (Array.isArray(researchedBreakouts) && researchedBreakouts.length > 0)
+    ? researchedBreakouts
+    : null;
+
+  if (breakoutSource) {
+    for (const s of breakoutSource) {
+      const pct = Number(s.pChange);
+      const cls = pct > 0 ? 'sym-green' : 'sym-red';
+      const dir = pct > 0 ? 'UP' : 'DOWN';
+      const sign = pct > 0 ? '+' : '';
+      const vol = s.totalTradedVolume
+        ? ` | Vol: ${Number(s.totalTradedVolume).toLocaleString('en-IN')}`
+        : '';
+      const reasonHtml = s.reason
+        ? `<br/><small style="color:#555;font-style:italic;">&#128269; ${s.reason}</small>`
+        : '';
+      items.push(`<li>${sym(s.symbol, cls)} &mdash; ${dir} ${sign}${Math.abs(pct).toFixed(2)}% @ &#8377;${formatPrice(s.lastPrice)}${vol}${reasonHtml}</li>`);
+    }
+  } else if (Array.isArray(universe) && universe.length > 0) {
     const breakouts = universe
       .filter(s => s && s.pChange != null && Math.abs(Number(s.pChange)) >= 2.0)
       .sort((a, b) => Math.abs(Number(b.pChange)) - Math.abs(Number(a.pChange)))
@@ -113,7 +141,7 @@ function buildBreakoutsSection(universe, gainersLosers) {
         ? ` | Vol: ${Number(s.totalTradedVolume).toLocaleString('en-IN')}`
         : '';
       const why = Math.abs(pct) >= 5 ? ' — strong momentum move' : ' — notable intraday move';
-      items.push(`<li>${sym(s.symbol, cls)} — ${dir} ${sign}${Math.abs(pct).toFixed(2)}% @ &#8377;${formatPrice(s.lastPrice)}${vol}${why}</li>`);
+      items.push(`<li>${sym(s.symbol, cls)} &mdash; ${dir} ${sign}${Math.abs(pct).toFixed(2)}% @ &#8377;${formatPrice(s.lastPrice)}${vol}${why}</li>`);
     }
   }
 
@@ -126,14 +154,20 @@ function buildBreakoutsSection(universe, gainersLosers) {
       const pct = g.pChange || g.perChange || g.change || g.netPrice || '';
       const price = g.lastPrice || g.ltp || g.LTP || g.ltP || g.open || '';
       const priceStr = price ? ` @ &#8377;${formatPrice(price)}` : '';
-      if (ticker) items.push(`<li>${sym(ticker, 'sym-green')} — UP ${pct}%${priceStr} — top F&amp;O gainer</li>`);
+      const reasonHtml = g.reason
+        ? `<br/><small style="color:#555;font-style:italic;">&#128269; ${g.reason}</small>`
+        : '';
+      if (ticker) items.push(`<li>${sym(ticker, 'sym-green')} &mdash; UP ${pct}%${priceStr} — top F&amp;O gainer${reasonHtml}</li>`);
     }
     for (const l of losers) {
       const ticker = l.symbol || l.Symbol || l.meta?.symbol || '';
       const pct = l.pChange || l.perChange || l.change || l.netPrice || '';
       const price = l.lastPrice || l.ltp || l.LTP || l.ltP || l.open || '';
       const priceStr = price ? ` @ &#8377;${formatPrice(price)}` : '';
-      if (ticker) items.push(`<li>${sym(ticker, 'sym-red')} — DOWN ${pct}%${priceStr} — top F&amp;O loser</li>`);
+      const reasonHtml = l.reason
+        ? `<br/><small style="color:#555;font-style:italic;">&#128269; ${l.reason}</small>`
+        : '';
+      if (ticker) items.push(`<li>${sym(ticker, 'sym-red')} &mdash; DOWN ${pct}%${priceStr} — top F&amp;O loser${reasonHtml}</li>`);
     }
   }
 
@@ -315,7 +349,7 @@ function buildFallbackSection(fallbackNotes) {
 </div>`;
 }
 
-function buildDigestHtml({ universe, gainersLosers, corporateActions, bulkDeals, boardMeetings, brokerCallResults, banList, niftyIndex, fiiDiiResults, orderWinsResults, indexRejigResults, fallbackNotes, date, dateISO }) {
+function buildDigestHtml({ universe, gainersLosers, corporateActions, bulkDeals, boardMeetings, brokerCallResults, banList, niftyIndex, fiiDiiResults, orderWinsResults, indexRejigResults, fallbackNotes, date, dateISO, researchedBreakouts, niftyWebSummary, fiiDiiSummary }) {
   const universeCount = Array.isArray(universe) ? universe.length : 0;
 
   const header = `
@@ -329,8 +363,8 @@ function buildDigestHtml({ universe, gainersLosers, corporateActions, bulkDeals,
   </div>
 </div>`;
 
-  const marketBar = buildMarketBar(niftyIndex, fiiDiiResults);
-  const breakouts = buildBreakoutsSection(universe, gainersLosers);
+  const marketBar = buildMarketBar(niftyIndex, fiiDiiSummary || fiiDiiResults, niftyWebSummary);
+  const breakouts = buildBreakoutsSection(universe, gainersLosers, researchedBreakouts);
   const corpActions = buildCorporateActionsSection(corporateActions);
   const news = buildNewsSection(bulkDeals, boardMeetings, brokerCallResults);
   const orderWins = buildWebSearchSection('Order Wins &amp; Corporate Developments', '&#128220;', 'sh-teal', orderWinsResults);

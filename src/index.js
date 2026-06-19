@@ -24,6 +24,7 @@ const {
 
 const { buildDigestHtml } = require('./digest');
 const { sendDigest, createDraft } = require('./email');
+const { researchBreakouts, getFiiDiiData, getNiftyFromWeb } = require('./research');
 
 // Format date as DD-MMM-YYYY (e.g. 18-Jun-2026)
 function formatDateDisplay(d) {
@@ -166,7 +167,39 @@ async function main() {
     }
   }
 
-  // 9. FII/DII, order wins, index rejig (all web search)
+  // 9. Research step: find reasons for notable breakout stocks
+  let breakoutStocksWithReasons = [];
+  if (Array.isArray(universe) && universe.length > 0) {
+    const breakouts = universe
+      .filter(s => s && Math.abs(Number(s.pChange)) >= 2.0)
+      .sort((a, b) => Math.abs(Number(b.pChange)) - Math.abs(Number(a.pChange)))
+      .slice(0, 8);
+    if (breakouts.length > 0) {
+      console.log(`Researching reasons for ${breakouts.length} breakout stocks...`);
+      try {
+        breakoutStocksWithReasons = await researchBreakouts(breakouts, dateISO);
+        console.log('Research complete.');
+      } catch (err) {
+        console.warn(`Research step failed: ${err.message}`);
+      }
+    }
+  }
+
+  // Also get Nifty web summary if NSE API was blocked
+  let niftyWebSummary = null;
+  if (!niftyIndex) {
+    try {
+      niftyWebSummary = await getNiftyFromWeb(dateISO);
+    } catch {}
+  }
+
+  // Also get FII/DII data via research module
+  let fiiDiiSummary = null;
+  try {
+    fiiDiiSummary = await getFiiDiiData(dateISO);
+  } catch {}
+
+  // 10. FII/DII, order wins, index rejig (all web search)
   const [fiiDiiResults, orderWinsResults, indexRejigResults] = await Promise.allSettled([
     fallbackFiiDii(dateISO),
     fallbackOrderWins(dateISO),
@@ -175,7 +208,7 @@ async function main() {
 
   console.log(`FII/DII: ${fiiDiiResults.length}, Order wins: ${orderWinsResults.length}, Index rejig: ${indexRejigResults.length}`);
 
-  // 10. Build HTML digest
+  // 11. Build HTML digest
   const htmlBody = buildDigestHtml({
     universe,
     gainersLosers,
@@ -191,6 +224,9 @@ async function main() {
     fallbackNotes,
     date: dateDisplay,
     dateISO,
+    researchedBreakouts: breakoutStocksWithReasons,
+    niftyWebSummary,
+    fiiDiiSummary,
   });
 
   const subject = `NSE F&O Morning Digest – ${dateDisplay}`;
@@ -204,7 +240,7 @@ async function main() {
     return;
   }
 
-  // 10. Send email
+  // 12. Send email
   const gmailUser = process.env.GMAIL_USER;
   const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
   const recipientEmail = process.env.RECIPIENT_EMAIL || 'khushbanthia@gmail.com';
