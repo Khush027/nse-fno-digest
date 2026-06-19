@@ -25,6 +25,7 @@ const {
 const { buildDigestHtml } = require('./digest');
 const { sendDigest, createDraft } = require('./email');
 const { researchBreakouts, getFiiDiiData, getNiftyFromWeb } = require('./research');
+const { synthesizeDigest } = require('./claude');
 
 // Format date as DD-MMM-YYYY (e.g. 18-Jun-2026)
 function formatDateDisplay(d) {
@@ -208,7 +209,35 @@ async function main() {
 
   console.log(`FII/DII: ${fiiDiiResults.length}, Order wins: ${orderWinsResults.length}, Index rejig: ${indexRejigResults.length}`);
 
-  // 11. Build HTML digest
+  // 11. Synthesize with Claude API
+  let synthesizedSections = '';
+  if (process.env.ANTHROPIC_API_KEY) {
+    console.log('Synthesizing digest with Claude API...');
+    try {
+      const rawData = {
+        breakouts: breakoutStocksWithReasons,
+        gainersLosers: gainersLosers._fallback ? gainersLosers._fallback : {
+          gainers: gainersLosers.gainers ? gainersLosers.gainers.slice(0, 10) : [],
+          losers: gainersLosers.losers ? gainersLosers.losers.slice(0, 10) : [],
+        },
+        corporateActions: corporateActions.slice ? corporateActions.slice(0, 20) : [],
+        bulkDeals: Array.isArray(bulkDeals) ? bulkDeals.slice(0, 10) : [],
+        boardMeetings: Array.isArray(boardMeetings) ? boardMeetings.slice(0, 10) : [],
+        brokerCallResults,
+        banList,
+        fiiDiiSummary,
+        orderWinsResults,
+        indexRejigResults,
+        niftyIndex,
+      };
+      synthesizedSections = await synthesizeDigest({ rawData, date: dateDisplay, dateISO });
+      console.log('Claude synthesis complete.');
+    } catch (err) {
+      console.warn(`Claude synthesis failed (${err.message}), falling back to template.`);
+    }
+  }
+
+  // 12. Build final HTML digest
   const htmlBody = buildDigestHtml({
     universe,
     gainersLosers,
@@ -227,6 +256,7 @@ async function main() {
     researchedBreakouts: breakoutStocksWithReasons,
     niftyWebSummary,
     fiiDiiSummary,
+    synthesizedSections,
   });
 
   const subject = `NSE F&O Morning Digest – ${dateDisplay}`;

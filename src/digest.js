@@ -53,7 +53,7 @@ function niftyClass(pChange) {
   return 'flat';
 }
 
-function buildMarketBar(niftyIndex, fiiDiiResults, niftyWebSummary) {
+function buildMarketBar(niftyIndex, fiiDiiSummary, niftyWebSummary) {
   const last = niftyIndex ? niftyIndex.last : null;
   const change = niftyIndex ? niftyIndex.change : null;
   const pChange = niftyIndex ? niftyIndex.pChange : null;
@@ -65,7 +65,6 @@ function buildMarketBar(niftyIndex, fiiDiiResults, niftyWebSummary) {
     ? `<span class="${cls}">${Number(last).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
     : '<span class="flat">N/A</span>';
 
-  // If niftyVal is N/A and niftyWebSummary is available, show it instead
   const niftyDisplay = (last != null) ? niftyVal
     : niftyWebSummary
       ? `<span class="flat" style="font-size:0.82rem;">${niftyWebSummary.slice(0, 150)}</span>`
@@ -75,15 +74,17 @@ function buildMarketBar(niftyIndex, fiiDiiResults, niftyWebSummary) {
     ? `<span class="${cls}">${sign}${parseFloat(pChange).toFixed(2)}% (${sign}${formatPrice(change)})</span>`
     : '<span class="flat">N/A</span>';
 
-  // FII/DII: accept either a plain string summary or legacy array of search results
-  let fiiDiiHtml = '<span class="flat">See nseindia.com</span>';
-  if (typeof fiiDiiResults === 'string' && fiiDiiResults.length > 0) {
-    const snippet = fiiDiiResults.slice(0, 120);
-    fiiDiiHtml = `<span class="flat" title="${snippet}">${snippet}</span>`;
-  } else if (Array.isArray(fiiDiiResults) && fiiDiiResults.length > 0) {
-    const r = fiiDiiResults[0];
-    const snippet = (r.snippet || r.title || '').slice(0, 120);
-    fiiDiiHtml = `<span class="flat" title="${snippet}">${snippet}</span>`;
+  // Try to extract FII/DII numbers from fiiDiiSummary string
+  let fiiHtml = '<span class="flat">See nseindia.com</span>';
+  let diiHtml = '<span class="flat">See nseindia.com</span>';
+  if (typeof fiiDiiSummary === 'string' && fiiDiiSummary.length > 0) {
+    const numMatches = fiiDiiSummary.match(/[−\-\+]?[₹]?[\d,]+\.?\d*/g) || [];
+    if (numMatches.length >= 2) {
+      fiiHtml = `<span class="down">${numMatches[0]} Cr</span>`;
+      diiHtml = `<span class="up">${numMatches[1]} Cr</span>`;
+    } else {
+      fiiHtml = `<span class="flat" style="font-size:0.78rem;">${fiiDiiSummary.slice(0, 80)}</span>`;
+    }
   }
 
   return `
@@ -97,8 +98,12 @@ function buildMarketBar(niftyIndex, fiiDiiResults, niftyWebSummary) {
     <span class="value">${niftyChg}</span>
   </div>
   <div class="stat">
-    <span class="label">FII / DII Activity</span>
-    <span class="value" style="font-size:0.82rem;font-weight:normal;">${fiiDiiHtml}</span>
+    <span class="label">FII (prev day)</span>
+    <span class="value">${fiiHtml}</span>
+  </div>
+  <div class="stat">
+    <span class="label">DII (prev day)</span>
+    <span class="value">${diiHtml}</span>
   </div>
 </div>`;
 }
@@ -349,28 +354,32 @@ function buildFallbackSection(fallbackNotes) {
 </div>`;
 }
 
-function buildDigestHtml({ universe, gainersLosers, corporateActions, bulkDeals, boardMeetings, brokerCallResults, banList, niftyIndex, fiiDiiResults, orderWinsResults, indexRejigResults, fallbackNotes, date, dateISO, researchedBreakouts, niftyWebSummary, fiiDiiSummary }) {
+function buildDigestHtml({ universe, gainersLosers, corporateActions, bulkDeals, boardMeetings, brokerCallResults, banList, niftyIndex, fiiDiiResults, orderWinsResults, indexRejigResults, fallbackNotes, date, dateISO, researchedBreakouts, niftyWebSummary, fiiDiiSummary, synthesizedSections }) {
   const universeCount = Array.isArray(universe) ? universe.length : 0;
+
+  // Compute day of week and last trading day
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const today = new Date();
+  const dayName = dayNames[today.getDay()];
+  const fullDate = `${dayName}, ${today.getDate()} ${monthNames[today.getMonth()]} ${today.getFullYear()}`;
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  while (yesterday.getDay() === 0 || yesterday.getDay() === 6) yesterday.setDate(yesterday.getDate() - 1);
+  const lastTradingDay = `${dayNames[yesterday.getDay()]}, ${yesterday.getDate()} ${monthNames[yesterday.getMonth()]} ${yesterday.getFullYear()}`;
 
   const header = `
 <div class="header">
   <h1>&#128200; NSE F&amp;O Morning Digest</h1>
-  <div class="subtitle">F&amp;O Universe &mdash; Breakouts, Corporate Actions, News &amp; Ban List</div>
+  <div class="subtitle">${fullDate} &nbsp;|&nbsp; NSE F&amp;O Universe (${universeCount > 0 ? universeCount : '~200+'} stocks)</div>
   <div class="meta">
-    <span>&#128197; ${date}</span>
-    <span>&#8987; Generated at 8:00 AM IST</span>
-    ${universeCount > 0 ? `<span>&#128293; ${universeCount} stocks in universe</span>` : ''}
+    <span>&#9200; Generated at 8:00 AM IST</span>
+    <span>&#128197; Last trading day: ${lastTradingDay}</span>
   </div>
 </div>`;
 
   const marketBar = buildMarketBar(niftyIndex, fiiDiiSummary || fiiDiiResults, niftyWebSummary);
-  const breakouts = buildBreakoutsSection(universe, gainersLosers, researchedBreakouts);
-  const corpActions = buildCorporateActionsSection(corporateActions);
-  const news = buildNewsSection(bulkDeals, boardMeetings, brokerCallResults);
-  const orderWins = buildWebSearchSection('Order Wins &amp; Corporate Developments', '&#128220;', 'sh-teal', orderWinsResults);
-  const indexRejig = buildWebSearchSection('Index Rejig &amp; Macro News', '&#127758;', 'sh-purple', indexRejigResults);
-  const ban = buildBanSection(banList);
-  const keyDates = buildKeyDatesSection(boardMeetings);
+
   const fallback = buildFallbackSection(fallbackNotes);
 
   const footer = `
@@ -378,6 +387,20 @@ function buildDigestHtml({ universe, gainersLosers, corporateActions, bulkDeals,
   NSE F&amp;O Morning Digest &nbsp;|&nbsp; Auto-generated &nbsp;|&nbsp; ${date}, 8:00 AM IST<br/>
   <em>For informational purposes only. Not investment advice. Always verify with official NSE/BSE sources.</em>
 </div>`;
+
+  let bodySections;
+  if (synthesizedSections) {
+    bodySections = synthesizedSections;
+  } else {
+    const breakouts = buildBreakoutsSection(universe, gainersLosers, researchedBreakouts);
+    const corpActions = buildCorporateActionsSection(corporateActions);
+    const news = buildNewsSection(bulkDeals, boardMeetings, brokerCallResults);
+    const orderWins = buildWebSearchSection('Order Wins &amp; Corporate Developments', '&#128220;', 'sh-teal', orderWinsResults);
+    const indexRejig = buildWebSearchSection('Index Rejig &amp; Macro News', '&#127758;', 'sh-purple', indexRejigResults);
+    const ban = buildBanSection(banList);
+    const keyDates = buildKeyDatesSection(boardMeetings);
+    bodySections = [breakouts, corpActions, news, orderWins, indexRejig, ban, keyDates].join('\n');
+  }
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -391,13 +414,7 @@ function buildDigestHtml({ universe, gainersLosers, corporateActions, bulkDeals,
 <div class="container">
 ${header}
 ${marketBar}
-${breakouts}
-${corpActions}
-${news}
-${orderWins}
-${indexRejig}
-${ban}
-${keyDates}
+${bodySections}
 ${fallback}
 ${footer}
 </div>
