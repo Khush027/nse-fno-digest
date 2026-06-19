@@ -6,6 +6,8 @@ const {
   fetchCorporateActions,
   fetchBulkDeals,
   fetchBoardMeetings,
+  fetchNiftyIndex,
+  fetchBanList,
 } = require('./nse');
 
 const {
@@ -16,7 +18,7 @@ const {
   fallbackGainersLosers,
 } = require('./search');
 
-const { buildDigest } = require('./digest');
+const { buildDigestHtml } = require('./digest');
 const { sendDigest, createDraft } = require('./email');
 
 // Format date as DD-MMM-YYYY (e.g. 18-Jun-2026)
@@ -131,29 +133,52 @@ async function main() {
     console.warn(`Broker calls web search failed: ${err.message}`);
   }
 
-  // 7. Build digest
-  const body = buildDigest({
+  // 7. Nifty index
+  let niftyIndex = null;
+  try {
+    niftyIndex = await fetchNiftyIndex();
+    console.log(`Nifty 50: ${niftyIndex.last} (${niftyIndex.pChange}%)`);
+  } catch (err) {
+    console.warn(`Nifty index fetch failed (${err.message}).`);
+  }
+
+  // 8. F&O ban list
+  let banList = [];
+  try {
+    banList = await fetchBanList();
+    console.log(`F&O ban list: ${banList.length} stocks.`);
+  } catch (err) {
+    console.warn(`Ban list fetch failed (${err.message}).`);
+    fallbackNotes.push('F&O ban list: NSE blocked, verify manually at nseindia.com.');
+  }
+
+  // 9. Build HTML digest
+  const htmlBody = buildDigestHtml({
     universe,
     gainersLosers,
     corporateActions,
     bulkDeals,
     boardMeetings,
     brokerCallResults,
+    banList,
+    niftyIndex,
     fallbackNotes,
     date: dateDisplay,
+    dateISO,
   });
 
   const subject = `NSE F&O Morning Digest – ${dateDisplay}`;
 
   if (isDryRun) {
-    console.log('\n--- DRY RUN OUTPUT ---\n');
-    console.log(`Subject: ${subject}\n`);
-    console.log(body);
-    console.log('\n--- END DRY RUN ---');
+    const fs = require('fs');
+    const outPath = `/tmp/digest-preview-${Date.now()}.html`;
+    fs.writeFileSync(outPath, htmlBody);
+    console.log(`\n[DRY RUN] HTML preview saved to: ${outPath}`);
+    console.log(`Subject: ${subject}`);
     return;
   }
 
-  // 8. Send email
+  // 10. Send email
   const gmailUser = process.env.GMAIL_USER;
   const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
   const recipientEmail = process.env.RECIPIENT_EMAIL || 'khushbanthia@gmail.com';
@@ -161,12 +186,12 @@ async function main() {
   if (!gmailUser || !gmailAppPassword) {
     console.error('ERROR: GMAIL_USER and GMAIL_APP_PASSWORD environment variables are required.');
     console.error('Set them in your environment or .env file.');
-    createDraft({ subject, body, to: recipientEmail, from: gmailUser || 'nse-digest@localhost' });
+    createDraft({ subject, htmlBody, to: recipientEmail });
     process.exit(1);
   }
 
   try {
-    await sendDigest({ subject, body, to: recipientEmail, gmailUser, gmailAppPassword });
+    await sendDigest({ subject, htmlBody, to: recipientEmail, gmailUser, gmailAppPassword });
     console.log(`Digest sent to ${recipientEmail}`);
   } catch (err) {
     console.error(`Failed to send digest: ${err.message}`);

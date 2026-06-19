@@ -155,10 +155,37 @@ async function fetchBoardMeetings() {
   return Array.isArray(data) ? data : (data && data.data) || [];
 }
 
+// Fetch Nifty 50 index data
+async function fetchNiftyIndex() {
+  const cookies = await getSessionCookies();
+  const data = await nseGet('/api/allIndices', cookies);
+  if (!data || !data.data) throw new Error('BLOCKED');
+  const nifty = data.data.find(i => i.index === 'NIFTY 50');
+  if (!nifty) throw new Error('BLOCKED');
+  return {
+    last: nifty.last,
+    change: nifty.variation,
+    pChange: nifty.percentChange,
+  };
+}
+
+// Fetch F&O ban list
+async function fetchBanList() {
+  const cookies = await getSessionCookies();
+  // NSE ban list API
+  const data = await nseGet('/api/fo-ban-list', cookies);
+  // The API returns { data: [{ tradingSymbol: 'XYZ' }, ...] } or similar
+  if (!data) throw new Error('BLOCKED');
+  const list = data.data || data.banList || (Array.isArray(data) ? data : []);
+  return list.map(item => item.tradingSymbol || item.symbol || item.Symbol || '').filter(Boolean);
+}
+
 module.exports = {
   fetchFnoUniverse,
   fetchGainersLosers,
   fetchCorporateActions,
   fetchBulkDeals,
   fetchBoardMeetings,
+  fetchNiftyIndex,
+  fetchBanList,
 };

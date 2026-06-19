@@ -2,21 +2,18 @@
 
 const nodemailer = require('nodemailer');
 
-// Print draft to console so it is never lost if sending fails
-function createDraft({ subject, body, to, from }) {
-  console.log('\n' + '='.repeat(60));
-  console.log('=== DRAFT EMAIL ===');
-  console.log('='.repeat(60));
-  console.log(`From: ${from}`);
-  console.log(`To:   ${to}`);
+// Save draft HTML to a temp file
+function createDraft({ subject, htmlBody, to }) {
+  const ts = Date.now();
+  const path = `/tmp/digest-draft-${ts}.html`;
+  require('fs').writeFileSync(path, htmlBody);
+  console.log(`Draft saved to: ${path}`);
   console.log(`Subject: ${subject}`);
-  console.log('-'.repeat(60));
-  console.log(body);
-  console.log('='.repeat(60) + '\n');
+  console.log(`To: ${to}`);
 }
 
 // Send digest email via Gmail SMTP
-async function sendDigest({ subject, body, to, gmailUser, gmailAppPassword }) {
+async function sendDigest({ subject, htmlBody, to, gmailUser, gmailAppPassword }) {
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 587,
@@ -31,7 +28,7 @@ async function sendDigest({ subject, body, to, gmailUser, gmailAppPassword }) {
     from: gmailUser,
     to,
     subject,
-    text: body,
+    html: htmlBody,
   };
 
   try {
@@ -41,7 +38,7 @@ async function sendDigest({ subject, body, to, gmailUser, gmailAppPassword }) {
   } catch (err) {
     console.error(`Failed to send email: ${err.message}`);
     // Fall back to draft output so the digest is not lost
-    createDraft({ subject, body, to, from: gmailUser });
+    createDraft({ subject, htmlBody, to });
     throw err;
   }
 }
