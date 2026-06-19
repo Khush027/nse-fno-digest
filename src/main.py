@@ -12,7 +12,12 @@ import pytz
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data.nse_ban import fetch_ban_list
-from src.data.market_data import fetch_nifty_index, fetch_nifty_yfinance, fetch_fno_universe, fetch_gainers_losers
+from src.data.market_data import (
+    fetch_nifty_index, fetch_nifty_yfinance,
+    fetch_sensex_yfinance, fetch_fii_dii,
+    fetch_fno_universe, fetch_gainers_losers,
+    fetch_gainers_losers_yfinance,
+)
 from src.data.news import fetch_news
 from src.data.brokerage import fetch_brokerage_calls
 from src.data.corporate_actions import fetch_corporate_actions
@@ -82,6 +87,23 @@ def main() -> None:
             print(f"yfinance Nifty also failed: {e2}")
             fallback_notes.append("Nifty 50: could not fetch index data.")
 
+    # 1b. Sensex (always yfinance — NSE API doesn't serve BSE data)
+    sensex_index = None
+    try:
+        sensex_index = fetch_sensex_yfinance()
+        print(f"Sensex: {sensex_index['last']} ({sensex_index['pChange']}%)")
+    except Exception as e:
+        print(f"Sensex yfinance failed: {e}")
+
+    # 1c. FII/DII
+    fii_dii = {}
+    try:
+        fii_dii = fetch_fii_dii()
+        print(f"FII net: {fii_dii.get('fii_net')}  DII net: {fii_dii.get('dii_net')}")
+    except Exception as e:
+        print(f"FII/DII fetch failed ({e}) — NSE blocks non-Indian IPs.")
+        fallback_notes.append("FII/DII flows: not available (NSE blocks GitHub Actions IPs).")
+
     # 2. F&O universe
     universe = []
     try:
@@ -100,14 +122,16 @@ def main() -> None:
         losers = gl.get("losers", [])
         print(f"Gainers: {len(gainers)}, Losers: {len(losers)}")
     except Exception as e:
-        print(f"Gainers/losers fetch failed ({e}).")
-        # Derive from universe as fallback
-        if universe:
-            sorted_u = sorted(universe, key=lambda x: float(x.get("pChange") or 0), reverse=True)
-            gainers = [s for s in sorted_u if float(s.get("pChange") or 0) > 0][:10]
-            losers = list(reversed([s for s in sorted_u if float(s.get("pChange") or 0) < 0][:10]))
-            fallback_notes.append("Gainers/losers: derived from F&O universe data.")
-        else:
+        print(f"Gainers/losers NSE fetch failed ({e}), trying yfinance...")
+        try:
+            from src.fno_stocks import PRIORITY_SYMBOLS
+            gl = fetch_gainers_losers_yfinance(PRIORITY_SYMBOLS)
+            gainers = gl.get("gainers", [])
+            losers = gl.get("losers", [])
+            print(f"Gainers (yfinance): {len(gainers)}, Losers (yfinance): {len(losers)}")
+            fallback_notes.append("Gainers/losers: sourced from Yahoo Finance (NSE blocked).")
+        except Exception as e2:
+            print(f"yfinance gainers/losers also failed: {e2}")
             fallback_notes.append("Gainers/losers: no data available.")
 
     # 4. F&O ban list
@@ -148,13 +172,14 @@ def main() -> None:
     html = build_html(
         date_str=date_str,
         nifty_index=nifty_index,
+        sensex_index=sensex_index,
+        fii_dii=fii_dii,
         gainers=gainers,
         losers=losers,
         broker_calls=broker_calls,
         corporate_actions=corporate_actions,
         news_items=news_items,
         ban_list=ban_list,
-        fii_dii_summary="",
         fallback_notes=fallback_notes,
         universe_count=len(universe),
     )

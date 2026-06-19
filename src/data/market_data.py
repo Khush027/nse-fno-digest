@@ -85,6 +85,25 @@ def fetch_fno_universe() -> list[dict]:
     ]
 
 
+def _normalize_mover(item: dict) -> dict:
+    """Normalize NSE mover item to consistent field names."""
+    return {
+        "symbol": item.get("symbol", ""),
+        "lastPrice": item.get("ltp") or item.get("lastPrice") or item.get("last"),
+        "pChange": float(item.get("perChange") or item.get("pChange") or item.get("percentChange") or 0),
+        "prev_close": item.get("previousClose") or item.get("prevClose"),
+        "reason": "",
+    }
+
+
+def _extract_list(data: dict) -> list:
+    """Extract mover list from NSE response — handles both list and {data:[]} shapes."""
+    raw = data.get("FO") or data.get("NIFTY") or data.get("ALL") or []
+    if isinstance(raw, dict):
+        raw = raw.get("data", [])
+    return raw if isinstance(raw, list) else []
+
+
 def fetch_gainers_losers() -> dict:
     """Return {gainers: [...], losers: [...]}. Raises on failure."""
     session = _get_session()
@@ -92,11 +111,43 @@ def fetch_gainers_losers() -> dict:
     l_resp = session.get(NSE_BASE + "/api/live-analysis-variations?index=loosers", timeout=TIMEOUT)
     if g_resp.status_code in (401, 403) or l_resp.status_code in (401, 403):
         raise RuntimeError("BLOCKED")
-    g_data = g_resp.json()
-    l_data = l_resp.json()
-    gainers = (g_data.get("NIFTY") or {}).get("data") or []
-    losers = (l_data.get("NIFTY") or {}).get("data") or []
+    gainers = [_normalize_mover(i) for i in _extract_list(g_resp.json())]
+    losers = [_normalize_mover(i) for i in _extract_list(l_resp.json())]
+    if not gainers and not losers:
+        raise RuntimeError("EMPTY_RESPONSE")
     return {"gainers": gainers, "losers": losers}
+
+
+def fetch_sensex_yfinance() -> dict:
+    """Fetch Sensex from yfinance."""
+    ticker = yf.Ticker("^BSESN")
+    hist = ticker.history(period="2d")
+    if hist.empty:
+        raise RuntimeError("yfinance empty")
+    closes = hist["Close"].tolist()
+    last = closes[-1]
+    prev = closes[-2] if len(closes) >= 2 else last
+    change = last - prev
+    pChange = (change / prev * 100) if prev else 0
+    return {"last": round(last, 2), "change": round(change, 2), "pChange": round(pChange, 2)}
+
+
+def fetch_fii_dii() -> dict:
+    """Fetch FII/DII net flows from NSE. Returns {fii_net, dii_net} or raises."""
+    session = _get_session()
+    resp = session.get(NSE_BASE + "/api/fiidiiTradeReact", timeout=TIMEOUT)
+    if resp.status_code in (401, 403):
+        raise RuntimeError("BLOCKED")
+    resp.raise_for_status()
+    data = resp.json()
+    if not data:
+        raise RuntimeError("EMPTY")
+    latest = data[0]
+    return {
+        "fii_net": latest.get("fiiNet") or latest.get("fii_net") or "—",
+        "dii_net": latest.get("diiNet") or latest.get("dii_net") or "—",
+        "date": latest.get("date", ""),
+    }
 
 
 def fetch_gainers_losers_yfinance(symbols: list[str]) -> dict:

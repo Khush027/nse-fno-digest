@@ -129,58 +129,42 @@ def pct_class(v) -> str:
     return "flat"
 
 
-def _build_snapshot(nifty_index: dict | None, fii_dii_summary: str) -> str:
-    if nifty_index:
-        last = nifty_index.get("last")
-        p_change = nifty_index.get("pChange")
-        change = nifty_index.get("change")
+def _index_card(label: str, icon: str, index: dict | None) -> str:
+    if index:
+        last = index.get("last")
+        p_change = index.get("pChange")
+        change = index.get("change")
         cls = pct_class(p_change)
         sign = "+" if p_change is not None and float(p_change) > 0 else ""
-        nifty_val = (
+        val = (
             f'<div class="s-val {cls}">{float(last):,.2f}</div>'
             f'<div class="s-sub {cls}">{sign}{float(p_change or 0):.2f}% ({sign}{fmt_price(change)})</div>'
         )
     else:
-        nifty_val = '<div class="s-val flat">&mdash;</div>'
+        val = '<div class="s-val flat">&mdash;</div>'
+    return f'<div class="snap-card"><div class="s-label">{icon} {label}</div>{val}</div>'
 
-    # Parse FII/DII
-    fii_html = '<div class="s-val flat">&mdash;</div>'
-    dii_html = '<div class="s-val flat">&mdash;</div>'
-    if fii_dii_summary:
-        import re
-        nums = re.findall(r"[−\-]?[\d,]+\.?\d*", fii_dii_summary)
-        cleaned = [n for n in nums if len(n.replace(",", "").replace("-", "").replace("−", "")) >= 3]
-        if len(cleaned) >= 2:
-            try:
-                fii_num = float(cleaned[0].replace(",", "").replace("−", "-"))
-                dii_num = float(cleaned[1].replace(",", "").replace("−", "-"))
-                fsign = "+" if fii_num >= 0 else ""
-                dsign = "+" if dii_num >= 0 else ""
-                fii_html = f'<div class="s-val {"up" if fii_num >= 0 else "down"}">{fsign}{cleaned[0]} Cr</div><div class="s-sub">Provisional</div>'
-                dii_html = f'<div class="s-val {"up" if dii_num >= 0 else "down"}">{dsign}{cleaned[1]} Cr</div><div class="s-sub">Provisional</div>'
-            except ValueError:
-                pass
 
-    return f"""
-<div class="snapshot">
-  <div class="snap-card">
-    <div class="s-label">&#127754; Nifty 50</div>
-    {nifty_val}
-  </div>
-  <div class="snap-card">
-    <div class="s-label">&#128200; Sensex</div>
-    <div class="s-val flat">See BSE</div>
-    <div class="s-sub">bseindia.com</div>
-  </div>
-  <div class="snap-card">
-    <div class="s-label">&#127758; FII Flow</div>
-    {fii_html}
-  </div>
-  <div class="snap-card">
-    <div class="s-label">&#127968; DII Flow</div>
-    {dii_html}
-  </div>
-</div>"""
+def _build_snapshot(nifty_index: dict | None, sensex_index: dict | None, fii_dii: dict) -> str:
+    nifty_card = _index_card("Nifty 50", "&#127754;", nifty_index)
+    sensex_card = _index_card("Sensex", "&#128200;", sensex_index)
+
+    fii_net = fii_dii.get("fii_net", "—")
+    dii_net = fii_dii.get("dii_net", "—")
+
+    def flow_card(label: str, icon: str, net) -> str:
+        try:
+            val = float(str(net).replace(",", ""))
+            sign = "+" if val >= 0 else ""
+            cls = "up" if val >= 0 else "down"
+            return f'<div class="snap-card"><div class="s-label">{icon} {label}</div><div class="s-val {cls}">{sign}&#8377;{net} Cr</div><div class="s-sub">Net flow</div></div>'
+        except (ValueError, TypeError):
+            return f'<div class="snap-card"><div class="s-label">{icon} {label}</div><div class="s-val flat">&mdash;</div><div class="s-sub">Unavailable</div></div>'
+
+    fii_card = flow_card("FII Flow", "&#127758;", fii_net)
+    dii_card = flow_card("DII Flow", "&#127968;", dii_net)
+
+    return f'<div class="snapshot">{nifty_card}{sensex_card}{fii_card}{dii_card}</div>'
 
 
 def _build_gainers_section(gainers: list) -> str:
@@ -334,13 +318,14 @@ def build_html(
     *,
     date_str: str,
     nifty_index: dict | None = None,
+    sensex_index: dict | None = None,
+    fii_dii: dict | None = None,
     gainers: list | None = None,
     losers: list | None = None,
     broker_calls: list | None = None,
     corporate_actions: list | None = None,
     news_items: list | None = None,
     ban_list: list | None = None,
-    fii_dii_summary: str = "",
     fallback_notes: list | None = None,
     universe_count: int = 0,
 ) -> str:
@@ -377,7 +362,7 @@ def build_html(
   </div>
 </div>"""
 
-    snapshot = _build_snapshot(nifty_index, fii_dii_summary)
+    snapshot = _build_snapshot(nifty_index, sensex_index, fii_dii or {})
 
     sections = "\n".join([
         _build_gainers_section(gainers),
