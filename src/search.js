@@ -81,19 +81,20 @@ async function fallbackBoardMeetings(dateStr) {
   return searchWeb(`NSE India board meeting results declaration ${dateStr}`);
 }
 
-// Run multiple targeted searches and merge results
+// Run multiple targeted broker searches and merge results
 async function fallbackBrokerCalls(dateStr) {
-  const [upgrades, targets, calls] = await Promise.all([
-    searchWeb(`India stock broker upgrade downgrade target price ${dateStr}`),
-    searchWeb(`NSE stock analyst rating change buy sell ${dateStr} India`),
-    searchWeb(`Indian stock market broker recommendation today ${dateStr}`),
+  const [kotak, motilal, global, ratings] = await Promise.all([
+    searchWeb(`Kotak "Motilal Oswal" "ICICI Securities" stock buy sell target ${dateStr} India`),
+    searchWeb(`Emkay Edelweiss "Axis Securities" Nuvama stock recommendation target price ${dateStr}`),
+    searchWeb(`Goldman Sachs "Morgan Stanley" Jefferies Nomura India stock rating ${dateStr}`),
+    searchWeb(`NSE stock upgrade downgrade target price analyst India ${dateStr}`),
   ]);
   const seen = new Set();
-  return [...upgrades, ...targets, ...calls].filter(r => {
+  return [...kotak, ...motilal, ...global, ...ratings].filter(r => {
     if (seen.has(r.title)) return false;
     seen.add(r.title);
     return true;
-  }).slice(0, 6);
+  }).slice(0, 10);
 }
 
 async function fallbackGainersLosers(dateStr) {
