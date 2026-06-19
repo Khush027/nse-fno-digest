@@ -152,12 +152,16 @@ def _build_snapshot(nifty_index: dict | None, banknifty_index: dict | None, fii_
     fii_net = fii_dii.get("fii_net", "—")
     dii_net = fii_dii.get("dii_net", "—")
 
+    src_note = fii_dii.get("source", "")
+
     def flow_card(label: str, icon: str, net) -> str:
         try:
             val = float(str(net).replace(",", ""))
             sign = "+" if val >= 0 else ""
             cls = "up" if val >= 0 else "down"
-            return f'<div class="snap-card"><div class="s-label">{icon} {label}</div><div class="s-val {cls}">{sign}&#8377;{net} Cr</div><div class="s-sub">Net flow</div></div>'
+            disp = f"{val:,.0f}"
+            sub = src_note if src_note else "Net flow"
+            return f'<div class="snap-card"><div class="s-label">{icon} {label}</div><div class="s-val {cls}">{sign}&#8377;{disp} Cr</div><div class="s-sub">{sub}</div></div>'
         except (ValueError, TypeError):
             return f'<div class="snap-card"><div class="s-label">{icon} {label}</div><div class="s-val flat">&mdash;</div><div class="s-sub">Unavailable</div></div>'
 

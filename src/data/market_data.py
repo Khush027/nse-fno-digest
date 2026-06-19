@@ -120,21 +120,100 @@ def fetch_gainers_losers() -> dict:
 
 
 def fetch_fii_dii() -> dict:
-    """Fetch FII/DII net flows from NSE. Returns {fii_net, dii_net} or raises."""
-    session = _get_session()
-    resp = session.get(NSE_BASE + "/api/fiidiiTradeReact", timeout=TIMEOUT)
-    if resp.status_code in (401, 403):
-        raise RuntimeError("BLOCKED")
-    resp.raise_for_status()
-    data = resp.json()
-    if not data:
-        raise RuntimeError("EMPTY")
-    latest = data[0]
-    return {
-        "fii_net": latest.get("fiiNet") or latest.get("fii_net") or "—",
-        "dii_net": latest.get("diiNet") or latest.get("dii_net") or "—",
-        "date": latest.get("date", ""),
-    }
+    """
+    Fetch FII/DII net flows. Tries NSE API first; falls back to RSS article parsing.
+    Returns {fii_net, dii_net, source} or raises.
+    """
+    # 1. Try NSE API (works if run from Indian IP / cowork)
+    try:
+        session = _get_session()
+        resp = session.get(NSE_BASE + "/api/fiidiiTradeReact", timeout=TIMEOUT)
+        if resp.ok:
+            data = resp.json()
+            if data:
+                latest = data[0]
+                fii = latest.get("fiiNet") or latest.get("fii_net")
+                dii = latest.get("diiNet") or latest.get("dii_net")
+                if fii is not None and dii is not None:
+                    return {"fii_net": fii, "dii_net": dii, "source": "NSE"}
+    except Exception:
+        pass
+
+    # 2. Parse from RSS news articles (works from GitHub Actions)
+    return _fetch_fii_dii_from_rss()
+
+
+def _fetch_fii_dii_from_rss() -> dict:
+    """
+    Scrape FII/DII crore figures from ET Markets / Moneycontrol RSS articles.
+    These appear daily in market-wrap and pre-open reports.
+    """
+    import re, feedparser
+
+    RSS_SOURCES = [
+        "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms",
+        "https://economictimes.indiatimes.com/markets/rss.cms",
+        "https://www.moneycontrol.com/rss/marketreports.xml",
+        "https://www.business-standard.com/rss/markets-106.rss",
+        "https://www.livemint.com/rss/markets",
+    ]
+
+    # Patterns that capture the sign and magnitude
+    # Matches: "FIIs net sold/bought Rs 1,234 crore" or "FII: -1234 cr" etc.
+    FII_BUY  = re.compile(r'fii[s]?\s+(?:net\s+)?(?:buy|bought|purchas)[^\d₹Rs]{0,30}(?:rs\.?\s*|₹\s*)?([\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
+    FII_SELL = re.compile(r'fii[s]?\s+(?:net\s+)?(?:sell|sold)[^\d₹Rs]{0,30}(?:rs\.?\s*|₹\s*)?([\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
+    DII_BUY  = re.compile(r'dii[s]?\s+(?:net\s+)?(?:buy|bought|purchas)[^\d₹Rs]{0,30}(?:rs\.?\s*|₹\s*)?([\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
+    DII_SELL = re.compile(r'dii[s]?\s+(?:net\s+)?(?:sell|sold)[^\d₹Rs]{0,30}(?:rs\.?\s*|₹\s*)?([\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
+    # Compact: "FII -1,234 cr" or "FII: +2,345 crore"
+    FII_NET  = re.compile(r'\bfii[s]?[:\s]+([+-]?[\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
+    DII_NET  = re.compile(r'\bdii[s]?[:\s]+([+-]?[\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
+
+    def _parse(text):
+        text = re.sub(r'<[^>]+>', ' ', text)  # strip HTML tags
+        fii = dii = None
+
+        m = FII_BUY.search(text)
+        if m:
+            fii = float(m.group(1).replace(',', ''))
+        m = FII_SELL.search(text)
+        if m:
+            fii = -float(m.group(1).replace(',', ''))
+        if fii is None:
+            m = FII_NET.search(text)
+            if m:
+                fii = float(m.group(1).replace(',', ''))
+
+        m = DII_BUY.search(text)
+        if m:
+            dii = float(m.group(1).replace(',', ''))
+        m = DII_SELL.search(text)
+        if m:
+            dii = -float(m.group(1).replace(',', ''))
+        if dii is None:
+            m = DII_NET.search(text)
+            if m:
+                dii = float(m.group(1).replace(',', ''))
+
+        return fii, dii
+
+    for url in RSS_SOURCES:
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:15]:
+                text = entry.get("title", "") + " " + entry.get("summary", "")
+                if "fii" not in text.lower() and "dii" not in text.lower():
+                    continue
+                fii, dii = _parse(text)
+                if fii is not None and dii is not None:
+                    return {
+                        "fii_net": round(fii, 2),
+                        "dii_net": round(dii, 2),
+                        "source": "RSS",
+                    }
+        except Exception:
+            continue
+
+    raise RuntimeError("FII/DII not found in any RSS source")
 
 
 def fetch_gainers_losers_yfinance(symbols: list[str]) -> dict:
