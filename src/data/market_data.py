@@ -1,153 +1,134 @@
 """
-Fetch market data: Nifty index, F&O universe, gainers/losers.
-Falls back to yfinance when NSE API is blocked.
+Market data via yfinance — works from any IP, no NSE session needed.
 """
-import requests
 import yfinance as yf
-from datetime import datetime
-import pytz
+import requests
+from bs4 import BeautifulSoup
 
-NSE_BASE = "https://www.nseindia.com"
-TIMEOUT = 10
-IST = pytz.timezone("Asia/Kolkata")
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.nseindia.com",
-}
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"}
 
 
-def _get_session():
-    s = requests.Session()
-    s.headers.update(HEADERS)
+def get_market_data() -> dict:
+    """
+    Fetch Nifty50, Sensex, BankNifty, USD/INR, Crude Oil, Gold via yfinance.
+    Uses period='5d' so weekends/holidays don't break iloc[-2].
+    Returns dict keyed by name; each value is {close, prev_close, change, pct_change, high, low} or None.
+    """
+    tickers = {
+        "nifty50":   "^NSEI",
+        "sensex":    "^BSESN",
+        "banknifty": "^NSEBANK",
+        "usdinr":    "USDINR=X",
+        "crude":     "CL=F",
+        "gold":      "GC=F",
+    }
+    results = {}
+    for name, symbol in tickers.items():
+        try:
+            t = yf.Ticker(symbol)
+            hist = t.history(period="5d")
+            if len(hist) >= 2:
+                prev = hist.iloc[-2]
+                curr = hist.iloc[-1]
+                chg  = round(float(curr["Close"] - prev["Close"]), 2)
+                pct  = round(chg / float(prev["Close"]) * 100, 2)
+                results[name] = {
+                    "close":      round(float(curr["Close"]), 2),
+                    "prev_close": round(float(prev["Close"]), 2),
+                    "change":     chg,
+                    "pct_change": pct,
+                    "high":       round(float(curr["High"]), 2),
+                    "low":        round(float(curr["Low"]), 2),
+                }
+            else:
+                results[name] = None
+        except Exception as e:
+            print(f"  yfinance {name} ({symbol}) failed: {e}")
+            results[name] = None
+    return results
+
+
+def get_top_gainers_losers(n: int = 5) -> dict:
+    """
+    Batch-download all F&O stocks via yfinance and compute previous-session change.
+    Returns {gainers: [...], losers: [...]}.
+    """
+    from src.fno_stocks import FNO_SYMBOLS
+
+    symbols_yf = [s + ".NS" for s in FNO_SYMBOLS]
+
     try:
-        s.get(NSE_BASE + "/", timeout=TIMEOUT)
-    except Exception:
-        pass
-    return s
+        data = yf.download(
+            symbols_yf,
+            period="5d",
+            interval="1d",
+            group_by="ticker",
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
+    except Exception as e:
+        print(f"  yfinance batch download failed: {e}")
+        return {"gainers": [], "losers": []}
 
+    changes = []
+    for sym in FNO_SYMBOLS:
+        try:
+            ticker = sym + ".NS"
+            closes = data[ticker]["Close"].dropna()
+            if len(closes) >= 2:
+                prev_close = float(closes.iloc[-2])
+                last_close = float(closes.iloc[-1])
+                pct = round((last_close - prev_close) / prev_close * 100, 2)
+                changes.append({
+                    "symbol":     sym,
+                    "ltp":        round(last_close, 2),
+                    "prev_close": round(prev_close, 2),
+                    "change":     round(last_close - prev_close, 2),
+                    "pct_change": pct,
+                    "reason":     "",
+                })
+        except Exception:
+            continue
 
-def fetch_nifty_index(index_name: str = "NIFTY 50") -> dict:
-    """Return {last, change, pChange} for the given NSE index. Raises on failure."""
-    session = _get_session()
-    resp = session.get(NSE_BASE + "/api/allIndices", timeout=TIMEOUT)
-    if resp.status_code in (401, 403):
-        raise RuntimeError("BLOCKED")
-    resp.raise_for_status()
-    data = resp.json()
-    idx = next((i for i in (data.get("data") or []) if i.get("index") == index_name), None)
-    if not idx:
-        raise RuntimeError(f"Index '{index_name}' not found")
-    return {
-        "last": idx.get("last"),
-        "change": idx.get("variation"),
-        "pChange": idx.get("percentChange"),
-    }
-
-
-def fetch_nifty_yfinance() -> dict:
-    """Fallback: fetch ^NSEI from yfinance."""
-    ticker = yf.Ticker("^NSEI")
-    hist = ticker.history(period="2d")
-    if hist.empty:
-        raise RuntimeError("yfinance returned empty data")
-    closes = hist["Close"].tolist()
-    last = closes[-1]
-    prev = closes[-2] if len(closes) >= 2 else last
-    change = last - prev
-    pChange = (change / prev * 100) if prev else 0
-    return {"last": round(last, 2), "change": round(change, 2), "pChange": round(pChange, 2)}
-
-
-def fetch_fno_universe() -> list[dict]:
-    """Return list of {symbol, lastPrice, pChange, totalTradedVolume}. Raises on failure."""
-    session = _get_session()
-    resp = session.get(
-        NSE_BASE + "/api/equity-stockIndices?index=SECURITIES%20IN%20F%26O",
-        timeout=TIMEOUT,
-    )
-    if resp.status_code in (401, 403):
-        raise RuntimeError("BLOCKED")
-    resp.raise_for_status()
-    data = resp.json()
-    if not data or not data.get("data"):
-        raise RuntimeError("BLOCKED")
-    return [
-        {
-            "symbol": item.get("symbol", ""),
-            "lastPrice": item.get("lastPrice"),
-            "pChange": item.get("pChange"),
-            "totalTradedVolume": item.get("totalTradedVolume"),
-        }
-        for item in data["data"]
-    ]
-
-
-def _normalize_mover(item: dict) -> dict:
-    """Normalize NSE mover item to consistent field names."""
-    return {
-        "symbol": item.get("symbol", ""),
-        "lastPrice": item.get("ltp") or item.get("lastPrice") or item.get("last"),
-        "pChange": float(item.get("perChange") or item.get("pChange") or item.get("percentChange") or 0),
-        "prev_close": item.get("previousClose") or item.get("prevClose"),
-        "reason": "",
-    }
-
-
-def _extract_list(data: dict) -> list:
-    """Extract mover list from NSE response — handles both list and {data:[]} shapes."""
-    raw = data.get("FO") or data.get("NIFTY") or data.get("ALL") or []
-    if isinstance(raw, dict):
-        raw = raw.get("data", [])
-    return raw if isinstance(raw, list) else []
-
-
-def fetch_gainers_losers() -> dict:
-    """Return {gainers: [...], losers: [...]}. Raises on failure."""
-    session = _get_session()
-    g_resp = session.get(NSE_BASE + "/api/live-analysis-variations?index=gainers", timeout=TIMEOUT)
-    l_resp = session.get(NSE_BASE + "/api/live-analysis-variations?index=loosers", timeout=TIMEOUT)
-    if g_resp.status_code in (401, 403) or l_resp.status_code in (401, 403):
-        raise RuntimeError("BLOCKED")
-    gainers = [_normalize_mover(i) for i in _extract_list(g_resp.json())]
-    losers = [_normalize_mover(i) for i in _extract_list(l_resp.json())]
-    if not gainers and not losers:
-        raise RuntimeError("EMPTY_RESPONSE")
+    changes.sort(key=lambda x: x["pct_change"], reverse=True)
+    gainers = [c for c in changes if c["pct_change"] > 0][:n]
+    losers  = list(reversed([c for c in changes if c["pct_change"] < 0]))[:n]
     return {"gainers": gainers, "losers": losers}
 
 
-
-def fetch_fii_dii() -> dict:
+def get_fii_dii_data() -> dict:
     """
-    Fetch FII/DII net flows. Tries NSE API first; falls back to RSS article parsing.
-    Returns {fii_net, dii_net, source} or raises.
+    Scrape FII/DII net flows from Trendlyne — not geo-blocked.
+    Falls back to RSS article parsing if scraping fails.
     """
-    # 1. Try NSE API (works if run from Indian IP / cowork)
+    # 1. Try Trendlyne
     try:
-        session = _get_session()
-        resp = session.get(NSE_BASE + "/api/fiidiiTradeReact", timeout=TIMEOUT)
+        resp = requests.get(
+            "https://trendlyne.com/fii-dii-activity/",
+            headers=HEADERS,
+            timeout=15,
+        )
         if resp.ok:
-            data = resp.json()
-            if data:
-                latest = data[0]
-                fii = latest.get("fiiNet") or latest.get("fii_net")
-                dii = latest.get("diiNet") or latest.get("dii_net")
-                if fii is not None and dii is not None:
-                    return {"fii_net": fii, "dii_net": dii, "source": "NSE"}
-    except Exception:
-        pass
+            soup = BeautifulSoup(resp.text, "lxml")
+            rows = soup.select("table tbody tr")
+            if rows:
+                cells = rows[0].find_all("td")
+                if len(cells) > 7:
+                    return {
+                        "fii_net": cells[3].text.strip(),
+                        "dii_net": cells[7].text.strip(),
+                        "source":  "Trendlyne",
+                    }
+    except Exception as e:
+        print(f"  Trendlyne FII/DII failed: {e}")
 
-    # 2. Parse from RSS news articles (works from GitHub Actions)
-    return _fetch_fii_dii_from_rss()
+    # 2. Parse from RSS articles
+    return _fii_dii_from_rss()
 
 
-def _fetch_fii_dii_from_rss() -> dict:
-    """
-    Scrape FII/DII crore figures from ET Markets / Moneycontrol RSS articles.
-    These appear daily in market-wrap and pre-open reports.
-    """
+def _fii_dii_from_rss() -> dict:
+    """Parse FII/DII crore amounts from ET Markets / Moneycontrol RSS."""
     import re, feedparser
 
     RSS_SOURCES = [
@@ -158,81 +139,31 @@ def _fetch_fii_dii_from_rss() -> dict:
         "https://www.livemint.com/rss/markets",
     ]
 
-    # Patterns that capture the sign and magnitude
-    # Matches: "FIIs net sold/bought Rs 1,234 crore" or "FII: -1234 cr" etc.
-    FII_BUY  = re.compile(r'fii[s]?\s+(?:net\s+)?(?:buy|bought|purchas)[^\d₹Rs]{0,30}(?:rs\.?\s*|₹\s*)?([\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
-    FII_SELL = re.compile(r'fii[s]?\s+(?:net\s+)?(?:sell|sold)[^\d₹Rs]{0,30}(?:rs\.?\s*|₹\s*)?([\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
-    DII_BUY  = re.compile(r'dii[s]?\s+(?:net\s+)?(?:buy|bought|purchas)[^\d₹Rs]{0,30}(?:rs\.?\s*|₹\s*)?([\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
-    DII_SELL = re.compile(r'dii[s]?\s+(?:net\s+)?(?:sell|sold)[^\d₹Rs]{0,30}(?:rs\.?\s*|₹\s*)?([\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
-    # Compact: "FII -1,234 cr" or "FII: +2,345 crore"
-    FII_NET  = re.compile(r'\bfii[s]?[:\s]+([+-]?[\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
-    DII_NET  = re.compile(r'\bdii[s]?[:\s]+([+-]?[\d,]+\.?\d*)\s*(?:crore|cr\b)', re.I)
+    FII_BUY  = re.compile(r'fii[s]?\s+(?:net\s+)?(?:buy|bought)[^\d]{0,30}(?:rs\.?\s*|₹)?([\d,]+)', re.I)
+    FII_SELL = re.compile(r'fii[s]?\s+(?:net\s+)?(?:sell|sold)[^\d]{0,30}(?:rs\.?\s*|₹)?([\d,]+)', re.I)
+    DII_BUY  = re.compile(r'dii[s]?\s+(?:net\s+)?(?:buy|bought)[^\d]{0,30}(?:rs\.?\s*|₹)?([\d,]+)', re.I)
+    DII_SELL = re.compile(r'dii[s]?\s+(?:net\s+)?(?:sell|sold)[^\d]{0,30}(?:rs\.?\s*|₹)?([\d,]+)', re.I)
 
     def _parse(text):
-        text = re.sub(r'<[^>]+>', ' ', text)  # strip HTML tags
+        text = re.sub(r'<[^>]+>', ' ', text)
         fii = dii = None
-
-        m = FII_BUY.search(text)
-        if m:
-            fii = float(m.group(1).replace(',', ''))
-        m = FII_SELL.search(text)
-        if m:
-            fii = -float(m.group(1).replace(',', ''))
-        if fii is None:
-            m = FII_NET.search(text)
-            if m:
-                fii = float(m.group(1).replace(',', ''))
-
-        m = DII_BUY.search(text)
-        if m:
-            dii = float(m.group(1).replace(',', ''))
-        m = DII_SELL.search(text)
-        if m:
-            dii = -float(m.group(1).replace(',', ''))
-        if dii is None:
-            m = DII_NET.search(text)
-            if m:
-                dii = float(m.group(1).replace(',', ''))
-
+        m = FII_BUY.search(text);  fii = float(m.group(1).replace(',','')) if m else fii
+        m = FII_SELL.search(text); fii = -float(m.group(1).replace(',','')) if m else fii
+        m = DII_BUY.search(text);  dii = float(m.group(1).replace(',','')) if m else dii
+        m = DII_SELL.search(text); dii = -float(m.group(1).replace(',','')) if m else dii
         return fii, dii
 
     for url in RSS_SOURCES:
         try:
             feed = feedparser.parse(url)
             for entry in feed.entries[:15]:
-                text = entry.get("title", "") + " " + entry.get("summary", "")
-                if "fii" not in text.lower() and "dii" not in text.lower():
+                text = entry.get("title","") + " " + entry.get("summary","")
+                if "fii" not in text.lower():
                     continue
                 fii, dii = _parse(text)
                 if fii is not None and dii is not None:
-                    return {
-                        "fii_net": round(fii, 2),
-                        "dii_net": round(dii, 2),
-                        "source": "RSS",
-                    }
+                    return {"fii_net": round(fii, 2), "dii_net": round(dii, 2), "source": "RSS"}
         except Exception:
             continue
 
-    raise RuntimeError("FII/DII not found in any RSS source")
-
-
-def fetch_gainers_losers_yfinance(symbols: list[str]) -> dict:
-    """Fallback: compute gainers/losers from yfinance data for given symbols."""
-    results = []
-    for sym in symbols[:50]:  # limit to avoid rate limiting
-        try:
-            t = yf.Ticker(sym + ".NS")
-            hist = t.history(period="2d")
-            if hist.empty or len(hist) < 2:
-                continue
-            closes = hist["Close"].tolist()
-            last = closes[-1]
-            prev = closes[-2]
-            pchange = (last - prev) / prev * 100 if prev else 0
-            results.append({"symbol": sym, "lastPrice": round(last, 2), "pChange": round(pchange, 2)})
-        except Exception:
-            continue
-    results.sort(key=lambda x: x["pChange"], reverse=True)
-    gainers = [r for r in results if r["pChange"] > 0][:10]
-    losers = [r for r in results if r["pChange"] < 0][-10:][::-1]
-    return {"gainers": gainers, "losers": losers}
+    return {"fii_net": "—", "dii_net": "—", "source": ""}

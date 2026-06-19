@@ -145,13 +145,13 @@ def _index_card(label: str, icon: str, index: dict | None) -> str:
     return f'<div class="snap-card"><div class="s-label">{icon} {label}</div>{val}</div>'
 
 
-def _build_snapshot(nifty_index: dict | None, banknifty_index: dict | None, fii_dii: dict) -> str:
-    nifty_card = _index_card("Nifty 50", "&#127754;", nifty_index)
-    sensex_card = _index_card("Bank Nifty", "&#127974;", banknifty_index)
+def _build_snapshot(nifty_index: dict | None, banknifty_index: dict | None, sensex_index: dict | None, fii_dii: dict, market_extras: dict) -> str:
+    nifty_card    = _index_card("Nifty 50", "&#127754;", nifty_index)
+    banknifty_card = _index_card("Bank Nifty", "&#127974;", banknifty_index)
+    sensex_card   = _index_card("Sensex", "&#128200;", sensex_index)
 
     fii_net = fii_dii.get("fii_net", "—")
     dii_net = fii_dii.get("dii_net", "—")
-
     src_note = fii_dii.get("source", "")
 
     def flow_card(label: str, icon: str, net) -> str:
@@ -165,10 +165,20 @@ def _build_snapshot(nifty_index: dict | None, banknifty_index: dict | None, fii_
         except (ValueError, TypeError):
             return f'<div class="snap-card"><div class="s-label">{icon} {label}</div><div class="s-val flat">&mdash;</div><div class="s-sub">Unavailable</div></div>'
 
-    fii_card = flow_card("FII Flow", "&#127758;", fii_net)
-    dii_card = flow_card("DII Flow", "&#127968;", dii_net)
+    def extra_card(label, icon, key, prefix="", suffix=""):
+        d = market_extras.get(key)
+        if d and d.get("close"):
+            cls = pct_class(d.get("pct_change", 0))
+            sign = "+" if (d.get("pct_change") or 0) > 0 else ""
+            return f'<div class="snap-card"><div class="s-label">{icon} {label}</div><div class="s-val {cls}">{prefix}{d["close"]:,.2f}{suffix}</div><div class="s-sub {cls}">{sign}{d.get("pct_change",0):.2f}%</div></div>'
+        return f'<div class="snap-card"><div class="s-label">{icon} {label}</div><div class="s-val flat">&mdash;</div></div>'
 
-    return f'<div class="snapshot">{nifty_card}{sensex_card}{fii_card}{dii_card}</div>'
+    fii_card  = flow_card("FII Flow",  "&#127758;", fii_net)
+    dii_card  = flow_card("DII Flow",  "&#127968;", dii_net)
+    usdinr_card = extra_card("USD/INR", "&#128178;", "usdinr", prefix="₹")
+    crude_card  = extra_card("Crude Oil", "&#128722;", "crude", prefix="$")
+
+    return f'<div class="snapshot">{nifty_card}{sensex_card}{banknifty_card}{fii_card}{dii_card}{usdinr_card}{crude_card}</div>'
 
 
 def _build_gainers_section(gainers: list) -> str:
@@ -323,6 +333,8 @@ def build_html(
     date_str: str,
     nifty_index: dict | None = None,
     banknifty_index: dict | None = None,
+    sensex_index: dict | None = None,
+    market_extras: dict | None = None,
     fii_dii: dict | None = None,
     gainers: list | None = None,
     losers: list | None = None,
@@ -366,7 +378,7 @@ def build_html(
   </div>
 </div>"""
 
-    snapshot = _build_snapshot(nifty_index, banknifty_index, fii_dii or {})
+    snapshot = _build_snapshot(nifty_index, banknifty_index, sensex_index, fii_dii or {}, market_extras or {})
 
     sections = "\n".join([
         _build_gainers_section(gainers),
