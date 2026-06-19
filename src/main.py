@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.data.nse_ban import fetch_ban_list
 from src.data.market_data import (
     fetch_nifty_index, fetch_nifty_yfinance,
-    fetch_sensex_yfinance, fetch_fii_dii,
+    fetch_fii_dii,
     fetch_fno_universe, fetch_gainers_losers,
     fetch_gainers_losers_yfinance,
 )
@@ -87,13 +87,25 @@ def main() -> None:
             print(f"yfinance Nifty also failed: {e2}")
             fallback_notes.append("Nifty 50: could not fetch index data.")
 
-    # 1b. Sensex (always yfinance — NSE API doesn't serve BSE data)
-    sensex_index = None
+    # 1b. Bank Nifty (NSE API — far more relevant for F&O than Sensex)
+    banknifty_index = None
     try:
-        sensex_index = fetch_sensex_yfinance()
-        print(f"Sensex: {sensex_index['last']} ({sensex_index['pChange']}%)")
+        banknifty_index = fetch_nifty_index("NIFTY BANK")
+        print(f"Bank Nifty: {banknifty_index['last']} ({banknifty_index['pChange']}%)")
     except Exception as e:
-        print(f"Sensex yfinance failed: {e}")
+        print(f"Bank Nifty fetch failed ({e}), trying yfinance...")
+        try:
+            import yfinance as yf
+            t = yf.Ticker("^NSEBANK")
+            h = t.history(period="2d")
+            if not h.empty:
+                closes = h["Close"].tolist()
+                last = closes[-1]
+                prev = closes[-2] if len(closes) >= 2 else last
+                ch = last - prev
+                banknifty_index = {"last": round(last, 2), "change": round(ch, 2), "pChange": round(ch / prev * 100 if prev else 0, 2)}
+        except Exception as e2:
+            print(f"Bank Nifty yfinance also failed: {e2}")
 
     # 1c. FII/DII
     fii_dii = {}
@@ -172,7 +184,7 @@ def main() -> None:
     html = build_html(
         date_str=date_str,
         nifty_index=nifty_index,
-        sensex_index=sensex_index,
+        banknifty_index=banknifty_index,
         fii_dii=fii_dii,
         gainers=gainers,
         losers=losers,

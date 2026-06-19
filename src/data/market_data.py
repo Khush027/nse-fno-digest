@@ -29,21 +29,21 @@ def _get_session():
     return s
 
 
-def fetch_nifty_index() -> dict:
-    """Return {last, change, pChange} for Nifty 50. Raises on failure."""
+def fetch_nifty_index(index_name: str = "NIFTY 50") -> dict:
+    """Return {last, change, pChange} for the given NSE index. Raises on failure."""
     session = _get_session()
     resp = session.get(NSE_BASE + "/api/allIndices", timeout=TIMEOUT)
     if resp.status_code in (401, 403):
         raise RuntimeError("BLOCKED")
     resp.raise_for_status()
     data = resp.json()
-    nifty = next((i for i in (data.get("data") or []) if i.get("index") == "NIFTY 50"), None)
-    if not nifty:
-        raise RuntimeError("BLOCKED")
+    idx = next((i for i in (data.get("data") or []) if i.get("index") == index_name), None)
+    if not idx:
+        raise RuntimeError(f"Index '{index_name}' not found")
     return {
-        "last": nifty.get("last"),
-        "change": nifty.get("variation"),
-        "pChange": nifty.get("percentChange"),
+        "last": idx.get("last"),
+        "change": idx.get("variation"),
+        "pChange": idx.get("percentChange"),
     }
 
 
@@ -117,19 +117,6 @@ def fetch_gainers_losers() -> dict:
         raise RuntimeError("EMPTY_RESPONSE")
     return {"gainers": gainers, "losers": losers}
 
-
-def fetch_sensex_yfinance() -> dict:
-    """Fetch Sensex from yfinance."""
-    ticker = yf.Ticker("^BSESN")
-    hist = ticker.history(period="2d")
-    if hist.empty:
-        raise RuntimeError("yfinance empty")
-    closes = hist["Close"].tolist()
-    last = closes[-1]
-    prev = closes[-2] if len(closes) >= 2 else last
-    change = last - prev
-    pChange = (change / prev * 100) if prev else 0
-    return {"last": round(last, 2), "change": round(change, 2), "pChange": round(pChange, 2)}
 
 
 def fetch_fii_dii() -> dict:

@@ -145,9 +145,9 @@ def _index_card(label: str, icon: str, index: dict | None) -> str:
     return f'<div class="snap-card"><div class="s-label">{icon} {label}</div>{val}</div>'
 
 
-def _build_snapshot(nifty_index: dict | None, sensex_index: dict | None, fii_dii: dict) -> str:
+def _build_snapshot(nifty_index: dict | None, banknifty_index: dict | None, fii_dii: dict) -> str:
     nifty_card = _index_card("Nifty 50", "&#127754;", nifty_index)
-    sensex_card = _index_card("Sensex", "&#128200;", sensex_index)
+    sensex_card = _index_card("Bank Nifty", "&#127974;", banknifty_index)
 
     fii_net = fii_dii.get("fii_net", "—")
     dii_net = fii_dii.get("dii_net", "—")
@@ -318,7 +318,7 @@ def build_html(
     *,
     date_str: str,
     nifty_index: dict | None = None,
-    sensex_index: dict | None = None,
+    banknifty_index: dict | None = None,
     fii_dii: dict | None = None,
     gainers: list | None = None,
     losers: list | None = None,
@@ -362,7 +362,7 @@ def build_html(
   </div>
 </div>"""
 
-    snapshot = _build_snapshot(nifty_index, sensex_index, fii_dii or {})
+    snapshot = _build_snapshot(nifty_index, banknifty_index, fii_dii or {})
 
     sections = "\n".join([
         _build_gainers_section(gainers),
